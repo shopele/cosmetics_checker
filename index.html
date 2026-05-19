@@ -34,6 +34,22 @@
         </span>
       </label>
     </div>
+
+    <div class="settings-row">
+      <label for="modelSelect" class="settings-label">AIモデル</label>
+      <select id="modelSelect" class="select-input"></select>
+    </div>
+
+    <div class="settings-row">
+      <button type="button" class="btn btn-ghost" id="customItemsToggle" style="color: var(--primary)">＋ カスタムチェック項目（社内基準）</button>
+    </div>
+    <div id="customItemsPanel" class="custom-items-panel" style="display:none">
+      <div class="custom-items-add">
+        <input type="text" id="customItemInput" placeholder="例: 自社ブランドロゴの記載" />
+        <button class="btn btn-secondary" id="addCustomItemBtn">追加</button>
+      </div>
+      <div id="customItemsList" class="custom-items-list"></div>
+    </div>
   </section>
 
   <!-- 画像アップロード -->
@@ -73,6 +89,25 @@
         📥 CSVエクスポート
       </button>
     </div>
+
+    <div class="history-filters">
+      <select id="filterCategory" class="select-input">
+        <option value="">全カテゴリ</option>
+        <option value="cosmetic">化粧品</option>
+        <option value="quasi_drug">医薬部外品</option>
+      </select>
+      <select id="filterStatus" class="select-input">
+        <option value="">全判定</option>
+        <option value="ok">問題なし</option>
+        <option value="ng">要確認（NG）</option>
+        <option value="unclear">要確認（判定不可）</option>
+      </select>
+      <input type="date" id="filterDateFrom" class="select-input" title="開始日">
+      <input type="date" id="filterDateTo" class="select-input" title="終了日">
+      <input type="text" id="filterKeyword" class="select-input" placeholder="カテゴリ・メモ検索">
+      <button class="btn btn-ghost" id="clearFiltersBtn" style="color: var(--subtext)">クリア</button>
+    </div>
+
     <div class="table-wrapper">
       <table class="history-table">
         <thead>
@@ -81,11 +116,12 @@
             <th>カテゴリ</th>
             <th>画像枚数</th>
             <th>全体判定</th>
+            <th>メモ</th>
             <th>詳細</th>
           </tr>
         </thead>
         <tbody id="historyBody">
-          <tr><td colspan="5" class="empty-row">履歴はありません</td></tr>
+          <tr><td colspan="6" class="empty-row">履歴はありません</td></tr>
         </tbody>
       </table>
     </div>
