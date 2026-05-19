@@ -1,7 +1,7 @@
 # API連携仕様書
 
 作成日: 2026-05-19  
-バージョン: 1.0
+バージョン: 1.1（2026-05-19 Vercel Serverless Function 仕様追記）
 
 ---
 
@@ -20,14 +20,17 @@
 
 ### ヘッダー
 
+**Vercel Serverless Function 経由（本番構成）**:
+
 ```javascript
 {
   'Content-Type': 'application/json',
-  'x-api-key': '<ユーザー入力のAPIキー>',
-  'anthropic-version': '2023-06-01',
-  'anthropic-dangerous-direct-browser-access': 'true'
+  'x-api-key': process.env.ANTHROPIC_API_KEY,  // サーバー側環境変数
+  'anthropic-version': '2023-06-01'
 }
 ```
+
+`anthropic-dangerous-direct-browser-access: true` はブラウザから直接 Claude API を呼び出す場合のみ必要なヘッダーである。Vercel Serverless Function 経由ではサーバーからの呼び出しになるため、このヘッダーは不要で送信しない。
 
 ### ボディ構造
 
@@ -216,3 +219,158 @@ async function parseResponse(responseJson, category) {
 - Claude API は1画像あたり最大5MB
 - 大きな画像は Canvas を使って事前にリサイズ（最大1920px）することを推奨
 - media_type は `image/jpeg`, `image/png`, `image/webp`, `image/gif` に対応
+
+---
+
+## 7. Vercel Serverless Function 仕様（`api/check.js`）
+
+### 7.1 概要
+
+ブラウザから Claude API を直接呼び出す代わりに、Vercel Serverless Function が APIキーを保持してプロキシする構成。クライアントは `/api/check` のみを呼び出す。
+
+```
+ブラウザ  →  POST /api/check  →  Vercel: api/check.js  →  Claude API
+                                  (ANTHROPIC_API_KEY を付与)
+```
+
+### 7.2 エンドポイント仕様
+
+| 項目 | 値 |
+|---|---|
+| パス | `/api/check` |
+| メソッド | POST のみ |
+| リクエスト Content-Type | `application/json` |
+| レスポンス Content-Type | `application/json` |
+| タイムアウト | 30 秒（`vercel.json` の `maxDuration` で設定） |
+
+### 7.3 リクエスト仕様
+
+クライアント（`js/app.js`）が送信するボディ構造は Claude API の Messages API 仕様に準拠し、Serverless Function はそのまま転送する。
+
+**クライアントが送信するボディ（変更なし）**:
+```json
+{
+  "model": "claude-opus-4-7",
+  "max_tokens": 2048,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": "<Base64データ>"
+          }
+        },
+        {
+          "type": "text",
+          "text": "<プロンプト>"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Serverless Function が Claude API に転送するヘッダー**:
+```
+Content-Type: application/json
+x-api-key: <process.env.ANTHROPIC_API_KEY>
+anthropic-version: 2023-06-01
+```
+
+注意: クライアントが元々送信していた `anthropic-dangerous-direct-browser-access: true` ヘッダーは Serverless Function 経由では不要。サーバー側からの通常の API 呼び出しになるため削除する。
+
+### 7.4 レスポンス仕様
+
+Claude API のレスポンスをそのままクライアントに返す（ステータスコードも含む）。
+
+**正常時（200）**: Claude API のレスポンス JSON をそのまま返す
+**Claude API エラー時（401, 429, 500 等）**: Claude API が返したステータスコードと JSON ボディをそのままクライアントに転送
+**Serverless Function 内エラー（ネットワーク障害等）**: `500` + `{ "error": { "message": "<エラーメッセージ>" } }`
+
+### 7.5 完全な実装コード
+
+```javascript
+// api/check.js - Vercel Serverless Function
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb'  // 複数画像送信に対応するためデフォルトの 4.5mb から拡張
+    }
+  }
+};
+
+export default async function handler(req, res) {
+  // POST のみ受け付ける
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: { message: 'Method Not Allowed' } });
+  }
+
+  // APIキー確認
+  const API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!API_KEY) {
+    return res.status(500).json({ error: { message: 'Server configuration error: API key not set' } });
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(req.body)
+    });
+
+    const data = await response.json();
+
+    // Claude API のステータスコードをそのままクライアントに返す
+    return res.status(response.status).json(data);
+
+  } catch (err) {
+    // ネットワークエラー等、fetch 自体が失敗した場合
+    return res.status(500).json({ error: { message: err.message } });
+  }
+}
+```
+
+### 7.6 クライアント側ヘッダーの変更
+
+`js/app.js` の `callAPI()` 関数が `/api/check` を呼び出す際のヘッダーから `anthropic-dangerous-direct-browser-access: true` を削除する必要がある。現在の実装ではこのヘッダーは含まれていないため、変更は不要（確認済み）。
+
+### 7.7 エラーハンドリングフロー
+
+```
+Serverless Function 内での処理順序:
+
+1. メソッド確認
+   └─ POST 以外 → 405 Method Not Allowed
+
+2. 環境変数確認
+   └─ ANTHROPIC_API_KEY 未設定 → 500 Server configuration error
+
+3. Claude API 呼び出し
+   ├─ fetch 成功
+   │   ├─ response.ok (200) → そのままクライアントに 200 + JSON
+   │   └─ response エラー (401/429/500等) → そのままクライアントに同ステータス + JSON
+   └─ fetch 失敗（ネットワーク障害等）
+       └─ 500 + { error: { message: "..." } }
+```
+
+クライアント側（`js/app.js` の `errorMessage()` 関数）は既存のステータスコード分岐（401, 429, 500+）でそのまま処理できる。
+
+### 7.8 CORS 設定
+
+Vercel Serverless Function は同一オリジン（`yourdomain.vercel.app`）からのリクエストのみを対象とするため、CORS 設定は原則不要。
+
+カスタムドメインを設定した場合や、別ドメインから呼び出す場合は以下のヘッダーを追加:
+```javascript
+res.setHeader('Access-Control-Allow-Origin', 'https://yourdomain.com');
+res.setHeader('Access-Control-Allow-Methods', 'POST');
+res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+```

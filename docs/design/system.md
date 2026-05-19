@@ -1,7 +1,7 @@
 # システム設計書
 
 作成日: 2026-05-19  
-バージョン: 1.0
+バージョン: 1.1（2026-05-19 Vercel デプロイ構成追記）
 
 ---
 
@@ -111,3 +111,188 @@
 - Edge（最新）: 対応
 - Firefox: 動作確認対象外
 - モバイル: レスポンシブ対応（補助的）
+
+---
+
+## 7. Vercel デプロイ構成
+
+### 7.1 デプロイ後アーキテクチャ
+
+```
+Vercel CDN（静的ファイル配信）
+├── index.html
+├── css/style.css
+└── js/
+    ├── rules.js
+    └── app.js
+
+Vercel Serverless Function
+└── api/check.js    ← POST /api/check エンドポイント
+```
+
+クライアントは `/api/check` を呼び出し、Serverless Function が `ANTHROPIC_API_KEY` を使って Claude API へプロキシする。APIキーはサーバー側環境変数に保持されるため、クライアントに露出しない。
+
+### 7.2 ファイル追加・変更一覧
+
+| ファイル | 操作 | 内容 |
+|---|---|---|
+| `api/check.js` | 新規作成 | Vercel Serverless Function（Claude API プロキシ） |
+| `vercel.json` | 新規作成 | ルーティング・ビルド設定 |
+| `package.json` | 更新 | `engines` フィールド追加、`express`/`dotenv` 削除 |
+| `server.js` | 削除対象 | Vercel 環境では不要（ローカル開発用として保持も可） |
+| `.gitignore` | 確認のみ | `.env` と `node_modules/` は既存で対応済み |
+| 静的ファイル群 | 変更なし | 現在の配置（ルート直下）のままでよい |
+
+### 7.3 静的ファイルの配置方針
+
+Vercel はデフォルトでプロジェクトルートを静的ファイルのルートとして扱う。`vercel.json` に `"outputDirectory"` を指定しない場合、ルート直下の `index.html`、`css/`、`js/` はそのまま CDN から配信される。現在の配置変更は不要。
+
+### 7.4 `api/check.js` 設計
+
+Vercel Serverless Function（Node.js）として `server.js` の `/api/check` エンドポイントを変換する。
+
+**ファイルパス**: `api/check.js`
+
+```javascript
+// Vercel Serverless Function: POST /api/check
+// Claude API へのリバースプロキシ。ANTHROPIC_API_KEY はサーバー側環境変数から取得。
+export default async function handler(req, res) {
+  // POST のみ受け付ける
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: { message: 'Method Not Allowed' } });
+  }
+
+  const API_KEY = process.env.ANTHROPIC_API_KEY;
+  if (!API_KEY) {
+    return res.status(500).json({ error: { message: 'API key not configured' } });
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify(req.body)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    return res.status(200).json(data);
+
+  } catch (err) {
+    return res.status(500).json({ error: { message: err.message } });
+  }
+}
+```
+
+**設計上の判断事項**:
+- `express` と `dotenv` は使用しない（Vercel ランタイムが不要）
+- `req.body` は Vercel が自動でパースする（`Content-Type: application/json` の場合）。ただし画像 Base64 を含むため最大ペイロードサイズに注意（後述）
+- Claude API のステータスコードはそのままクライアントに転送する（401・429 等をクライアント側の `errorMessage()` 関数で処理済み）
+
+### 7.5 `vercel.json` 設計
+
+```json
+{
+  "functions": {
+    "api/check.js": {
+      "maxDuration": 30
+    }
+  }
+}
+```
+
+**設計上の判断事項**:
+- `api/` ディレクトリ内のファイルは Vercel が自動でルーティングするため、`rewrites` セクションは不要。実際の `vercel.json` には記述していない
+- `maxDuration: 30` を指定する。Claude API（Vision）は画像サイズによっては応答に数十秒かかるため、デフォルトの 10 秒では不足するリスクがある（Vercel Hobby プランの上限は 60 秒）
+- `Content-Type: application/json` ヘッダーは Vercel が `res.json()` 呼び出し時に自動付与するため、`headers` セクションでの設定は不要
+
+### 7.6 `package.json` 更新方針
+
+```json
+{
+  "name": "cosmetics_checker",
+  "version": "1.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.x"
+  },
+  "scripts": {
+    "dev": "node server.js"
+  }
+}
+```
+
+**変更内容**:
+- `"type": "module"` に変更: `api/check.js` で `export default` 構文を使用するため CommonJS から ES Modules へ切り替える
+- `"engines": { "node": ">=20.x" }` を追加: Vercel の Node.js ランタイムバージョンを明示指定。Node.js 20 は Vercel の推奨 LTS バージョン
+- `express` と `dotenv` は現時点で `dependencies` に残存しているが、Serverless Function では不要。ローカル開発で `server.js` を使用する場合は `devDependencies` へ移動するか、`vercel dev` コマンドを代替手段として使うことを推奨する
+- `"main": "index.js"` は削除（エントリーポイントが不要なため）
+
+**補足 - `server.js` の扱い**:
+- `server.js` は Vercel デプロイには不要だが、ローカル開発の参照用として削除せず保持を推奨
+- Vercel CLI による `vercel dev` コマンドを使えば、ローカルでも Serverless Function を含む完全な動作確認が可能
+
+### 7.7 ペイロードサイズ制限
+
+| 環境 | 制限 |
+|---|---|
+| Vercel Serverless Function のリクエストボディ | 4.5 MB（デフォルト） |
+| `vercel.json` で `bodyParser` を無効化した場合 | 最大約 5 MB（`req` ストリームで処理） |
+| 既存の画像リサイズ処理（最大 1920px） | 1 画像あたり概ね 1 〜 3 MB |
+
+複数枚の画像を送信する場合、4.5 MB 制限に達する可能性がある。対策として以下を検討する:
+
+- **推奨**: `vercel.json` に `bodyParser` 設定を追加してサイズ上限を 4.5 MB から引き上げる
+- **代替**: クライアント側でさらなる画像圧縮（品質・解像度の下限設定）
+
+`vercel.json` に追記する設定例:
+```json
+{
+  "functions": {
+    "api/check.js": {
+      "maxDuration": 30
+    }
+  }
+}
+```
+
+Vercel の `bodyParser` は `api/check.js` 内で以下のようにデフォルト制限を明示的に変更できる（ただし上限は Vercel プランに依存）:
+```javascript
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '10mb'
+    }
+  }
+};
+```
+
+### 7.8 環境変数設定
+
+| 変数名 | 設定箇所 | 値 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Vercel Dashboard > Settings > Environment Variables | 実際の API キー |
+
+Vercel Dashboard で設定した環境変数は、Serverless Function 内で `process.env.ANTHROPIC_API_KEY` として参照できる。`Production`・`Preview`・`Development` の各環境で個別に設定可能。
+
+### 7.9 クライアントコード（`js/app.js`）の変更点
+
+現在の `callAPI()` 関数は `fetch('/api/check', ...)` を呼び出しており、**変更不要**。Vercel の URL が変わっても相対パスのため影響しない。
+
+`errorMessage()` 関数の 401 エラーメッセージは現在「`.env ファイルの ANTHROPIC_API_KEY を確認してください`」となっているが、Vercel デプロイ後はユーザーが `.env` を操作しないため、「APIキーが無効です。管理者にお問い合わせください。」等に変更することを推奨する。
+
+### 7.10 デプロイ手順概要
+
+1. GitHub リポジトリに `api/check.js`、`vercel.json`、更新済み `package.json` をプッシュ
+2. Vercel Dashboard でリポジトリをインポート（または `vercel` CLI で `vercel --prod`）
+3. Vercel Dashboard > Settings > Environment Variables で `ANTHROPIC_API_KEY` を設定
+4. 再デプロイ（環境変数設定後は自動再デプロイまたは手動トリガー）
+5. 発行された URL で動作確認

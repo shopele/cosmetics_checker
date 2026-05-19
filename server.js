@@ -1,6 +1,9 @@
-require('dotenv').config();
-const express = require('express');
-const path = require('path');
+import 'dotenv/config';
+import express from 'express';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,7 +15,7 @@ if (!API_KEY) {
 }
 
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname)));
+app.use(express.static(join(__dirname)));
 
 app.post('/api/check', async (req, res) => {
   try {

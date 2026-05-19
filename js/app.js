@@ -269,7 +269,7 @@ function calcOverallStatus(results) {
 }
 
 function errorMessage(err) {
-  if (err.status === 401) return 'APIキーが無効です。.env ファイルの ANTHROPIC_API_KEY を確認してください。';
+  if (err.status === 401) return 'APIキーが無効です。サーバーの ANTHROPIC_API_KEY 設定を確認してください。';
   if (err.status === 429) return 'APIの利用制限に達しました。しばらく時間をおいて再試行してください。';
   if (err.status >= 500) return 'サーバーエラーが発生しました。';
   if (!navigator.onLine) return 'インターネット接続を確認してください。';
