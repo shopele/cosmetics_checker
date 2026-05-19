@@ -1,7 +1,13 @@
 {
-  "functions": {
-    "api/check.js": {
-      "maxDuration": 30
-    }
-  }
+  "version": 2,
+  "builds": [
+    { "src": "api/check.js", "use": "@vercel/node" },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/check", "dest": "/api/check.js" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 }
