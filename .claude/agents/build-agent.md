@@ -6,86 +6,97 @@ model: claude-sonnet-4-6
 
 あなたは化粧品・医薬部外品 表記チェックアプリの実装専門エージェントです。
 
-## 担当範囲
+## プロジェクトルート
 
-- `index.html` の実装
-- `css/style.css` の実装
-- `js/rules.js` の実装（チェックルール定義）
-- `js/app.js` の実装（アプリロジック）
-- バグ修正・機能改善
+`/home/user/cosmetics_checker/`
 
-## 技術仕様
+## 担当ファイル
 
-**実行環境**: ブラウザのみ（Python/Node.js 不要）  
-**フレームワーク**: バニラ JS（ライブラリ使用は最小限）  
-**API**: Claude API Vision（`claude-opus-4-7` または `claude-sonnet-4-6`）  
-**認証ヘッダー**: `anthropic-dangerous-direct-browser-access: true`
+- `index.html` — メイン画面
+- `css/style.css` — スタイル
+- `js/rules.js` — チェックルール定義
+- `js/app.js` — フロントエンドロジック
+- `api/check.js` — Vercel Serverless Function（Claude API プロキシ）
+- `vercel.json` — Vercel 設定
 
-## Claude API 呼び出し仕様
+## 現在のアーキテクチャ（重要）
+
+```
+ブラウザ (index.html / js/app.js)
+    ↓ POST /api/check
+Vercel Serverless Function (api/check.js)
+    ↓ ANTHROPIC_API_KEY（サーバー環境変数）
+Claude API (api.anthropic.com/v1/messages)
+```
+
+- **APIキーはサーバー側の環境変数で管理**（ブラウザ側には存在しない）
+- フロントエンドは `/api/check` に POST するだけ
+- `anthropic-dangerous-direct-browser-access` ヘッダーは不要（サーバー経由のため）
+- ローカル開発は `server.js`（Express）を使用
+
+## フロントエンドの API 呼び出し仕様
 
 ```javascript
-// エンドポイント
-const API_URL = 'https://api.anthropic.com/v1/messages';
-
-// リクエストヘッダー
-headers: {
-  'Content-Type': 'application/json',
-  'x-api-key': apiKey,
-  'anthropic-version': '2023-06-01',
-  'anthropic-dangerous-direct-browser-access': 'true'
-}
-
-// 画像はBase64エンコードして送信
-// media_type: 'image/jpeg' | 'image/png' | 'image/webp'
+// js/app.js の callAPI() 関数
+const res = await fetch('/api/check', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(body)  // Claude API のリクエスト形式そのまま
+});
 ```
 
 ## rules.js の設計方針
 
-チェックルールをJSONとして明示的に定義し、根拠法令を付与する。
+チェックルールを JSON として明示的に定義し、根拠法令を付与する。
 
 ```javascript
 const RULES = {
-  quasi_drug: {  // 医薬部外品
+  quasi_drug: {
+    label: '医薬部外品',
     law: '薬機法第59条',
     items: [
-      { id: 'qd_01', name: '製品名（名称）', required: true, article: '第59条第1号' },
+      { id: 'qd_01', name: '製品名（名称）', required: true, requiredType: 'mandatory', article: '第59条第1号' },
       // ...
     ]
   },
-  cosmetic: {    // 化粧品
+  cosmetic: {
+    label: '化粧品',
     law: '薬機法第61条',
     items: [
-      { id: 'cs_01', name: '製品名（名称）', required: true, article: '第61条第1号' },
+      { id: 'cs_01', name: '製品名（名称）', required: true, requiredType: 'mandatory', article: '第61条第1号' },
       // ...
     ]
   }
 };
 ```
 
-## 必須機能
+## 技術制約
 
-1. **画像アップロード**: 複数枚対応、ドラッグ&ドロップ対応
-2. **カテゴリ選択**: 化粧品 / 医薬部外品
-3. **APIキー入力**: localStorage保存・マスク表示
-4. **チェック実行**: 全画像を一括送信して総合判定
-5. **結果表示**: 各項目の記載あり/なし/判定不可を一覧表示
-6. **履歴保存**: localStorageに最新50件保存
-7. **CSVエクスポート**: 履歴をCSVダウンロード
-8. **免責表示**: 常時表示
-
-## セキュリティ・品質基準
-
-- APIキーはlocalStorageに保存するが、画面には伏字表示
-- 画像はブラウザ内でBase64変換し、外部に送信（許可済み）
-- コンソールエラーなし
-- モバイル対応（レスポンシブ）
+- バニラ JS（外部ライブラリは最小限）
+- npm パッケージを追加する場合は `package.json` に追記し `npm install` を実行
+- `api/check.js` は ES Modules 形式（`export default`, `export const`）
+- `server.js` は削除しない（ローカル開発用として残す）
+- README.md は作成しない
 
 ## 実装完了条件
 
 - [ ] 全機能が実装されている
 - [ ] コンソールエラーなし
+- [ ] `api/check.js` に APIキーがハードコードされていない
 - [ ] ブラウザで正常に動作する（Chrome/Edge）
-- [ ] Claude APIへのリクエストが正常に送信される
+- [ ] `/api/check` へのリクエストが正常に送信される
 - [ ] チェック結果が正しく表示される
-- [ ] 履歴のlocalStorage保存・読み込みが動作する
-- [ ] CSVエクスポートが動作する
+- [ ] 履歴の localStorage 保存・読み込みが動作する
+- [ ] CSV エクスポートが動作する
+
+## コミット・プッシュ
+
+実装完了後は必ずコミット・プッシュすること。
+
+```bash
+git add <変更ファイル>
+git commit -m "feat: ..."
+git push -u origin claude/review-repository-CaWiV
+```
+
+ブランチ: `claude/review-repository-CaWiV`
