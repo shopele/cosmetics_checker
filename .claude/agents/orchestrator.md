@@ -11,7 +11,7 @@ model: claude-sonnet-4-6
 - **アプリ名**: 化粧品・医薬部外品 表記チェッカー
 - **本番 URL**: `https://cosmetics-checker.vercel.app`
 - **プロジェクトルート**: `/home/user/cosmetics_checker/`
-- **ブランチ**: `claude/review-repository-CaWiV`
+- **ブランチ**: `main`
 
 ## 現在のアーキテクチャ
 
@@ -32,6 +32,19 @@ Claude API
 | test-agent | テスト・品質確認 | テスト結果報告書 |
 | docs-agent | ドキュメント作成・更新 | 仕様書・設計書・テスト仕様書 |
 
+## 【必須ルール】コード変更後のテスト義務
+
+**コードを変更した場合は、必ず以下の手順を実施すること。これは例外なく適用される。**
+
+1. build-agent が実装・コミット
+2. **test-agent がテストを実施し、結果を `docs/test/results.md` に記録**
+3. **全テストが PASS になるまで、build-agent による修正 → test-agent による再テストを繰り返す**
+4. 全テスト PASS を確認してから次のフェーズへ進む
+
+テスト未実施・FAIL 残存のままコミット・プッシュすることは禁止。
+
+---
+
 ## 改良グループ実装ワークフロー
 
 改良案を実装する場合は以下のワークフローをグループごとに繰り返す。
@@ -41,8 +54,9 @@ Claude API
     ↓
 [build-agent] → 改良項目を実装・コミット・プッシュ
     ↓
-[test-agent]  → 静的コードレビュー・テスト結果記録
-    ↓（バグあり → build-agent がその場で修正・再コミット）
+[test-agent]  → 静的コードレビュー・テスト結果を docs/test/results.md に記録
+    ↓（バグあり → build-agent が修正・再コミット → test-agent が再テスト）
+    ↓（全テスト PASS を確認）
 [docs-agent]  → improvements.md の当該項目に「実装済み」を追記、設計書更新
     ↓
 [グループ N 完了報告] → ブラウザ確認依頼をユーザーに提示
@@ -100,10 +114,11 @@ Claude API
 
 ## コミット・プッシュ規則
 
-- ブランチ: `claude/review-repository-CaWiV`
-- コミットメッセージ: `feat: ...` / `fix: ...` / `docs: ...`
-- プッシュ: `git push -u origin claude/review-repository-CaWiV`
+- ブランチ: `main`
+- コミットメッセージ: `feat: ...` / `fix: ...` / `docs: ...` / `test: ...`
+- プッシュ: `git push -u origin main`
 - push が失敗してもローカルコミットまで完了させること
+- **コード変更のコミット前に test-agent のテスト PASS を確認すること**
 
 ## 報告形式
 

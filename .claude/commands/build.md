@@ -1,56 +1,38 @@
 build-agent として動作し、化粧品・医薬部外品 表記チェックアプリを実装してください。
 
-## 前提情報
-- 設計書: `docs/design/` 配下の各ファイルを参照
-- 要件: HANDOFF.md を参照
-- 技術スタック: HTML / CSS / JavaScript（バックエンドなし）
+## プロジェクト情報
 
-## 実装するファイル
+- **作業ディレクトリ**: `/home/user/cosmetics_checker/`
+- **ブランチ**: `main`
+- **アーキテクチャ**: ブラウザ → `POST /api/check` → Vercel Serverless Function → Claude API
 
-1. **`js/rules.js`** - チェックルール定義
-   - 医薬部外品（薬機法第59条）の10項目
-   - 化粧品（薬機法第61条）の7項目
-   - 各項目に id・name・required・article（根拠条文）を定義
+## 【必須ルール】実装後のテスト義務
 
-2. **`js/app.js`** - アプリロジック
-   - 画像アップロード処理（複数枚・ドラッグ&ドロップ）
-   - Claude API 呼び出し（Base64画像 + プロンプト）
-   - チェック結果のパース・表示
-   - 履歴のlocalStorage保存・読み込み
-   - CSVエクスポート
+**実装・修正後は必ず test-agent によるテストを実施し、全テストが PASS になったことを確認してからコミット・プッシュすること。**
 
-3. **`css/style.css`** - スタイル
-   - クリーンでプロフェッショナルなデザイン
-   - レスポンシブ対応
-   - 結果表示の見やすさ重視
+- FAIL が残ったままコミットすることは禁止
+- test-agent からの FAIL フィードバックは必ず修正して再テストを依頼する
 
-4. **`index.html`** - メイン画面
-   - APIキー入力欄（localStorage保存・マスク表示）
-   - カテゴリ選択（化粧品/医薬部外品）
-   - 画像アップロードエリア
-   - チェック実行ボタン
-   - 結果表示エリア
-   - 履歴一覧・CSVエクスポートボタン
-   - 免責表示（常時表示）
+## 担当ファイル
 
-## Claude API 呼び出し仕様
+- `index.html` — メイン画面
+- `css/style.css` — スタイル
+- `js/rules.js` — チェックルール定義
+- `js/app.js` — フロントエンドロジック
+- `api/check.js` — Vercel Serverless Function（Claude API プロキシ）
 
-```javascript
-const response = await fetch('https://api.anthropic.com/v1/messages', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'x-api-key': apiKey,
-    'anthropic-version': '2023-06-01',
-    'anthropic-dangerous-direct-browser-access': 'true'
-  },
-  body: JSON.stringify({
-    model: 'claude-opus-4-7',
-    max_tokens: 2048,
-    messages: [{ role: 'user', content: [...] }]
-  })
-});
+## 技術制約
+
+- APIキーはサーバー側の環境変数（`process.env.ANTHROPIC_API_KEY`）で管理。コードに埋め込まない
+- `server.js` は削除しない（ローカル開発用）
+- README.md は作成しない
+- バニラ JS（外部ライブラリは最小限）
+- `api/check.js` は ES Modules 形式
+
+## コミット・プッシュ
+
+```bash
+git add <変更ファイル>
+git commit -m "feat: ..."
+git push -u origin main
 ```
-
-## 完了条件
-ブラウザで `index.html` を開き、全機能が正常に動作すること。

@@ -1,26 +1,38 @@
 orchestrator エージェントとして動作し、化粧品・医薬部外品 表記チェックアプリの開発全体を統括してください。
 
 ## プロジェクト情報
-- **作業ディレクトリ**: D:\DEVELOP\Private\cosmetics_checker
-- **引き継ぎ情報**: HANDOFF.md を参照
-- **要件**: HANDOFF.md に全要件が記載済み
 
-## 実行手順
+- **作業ディレクトリ**: `/home/user/cosmetics_checker/`
+- **本番 URL**: `https://cosmetics-checker.vercel.app`
+- **ブランチ**: `main`
 
-1. HANDOFF.md を読んで現在の状況を把握する
-2. 既存ファイルを確認して進捗を確認する
-3. 未完了タスクを特定する
-4. 以下のワークフローで開発を進める：
+## 【必須ルール】コード変更後のテスト義務
+
+**コードを変更した場合は、例外なく以下を実施すること：**
+
+1. build-agent が実装・コミット
+2. **test-agent がテストを実施し、結果を `docs/test/results.md` に記録**
+3. **全テスト PASS を確認してから次のフェーズへ進む**
+4. FAIL がある場合は build-agent が修正 → test-agent が再テスト（繰り返す）
+5. FAIL が残ったままコミット・プッシュすることは禁止
+
+## 標準ワークフロー
 
 ```
-[design フェーズ] → design-agent に設計を委譲
-[docs フェーズ1] → docs-agent に要件仕様書・設計書作成を委譲
-[build フェーズ] → build-agent に実装を委譲
-[docs フェーズ2] → docs-agent にテスト仕様書作成を委譲
-[test フェーズ]  → test-agent にテストを委譲
-[docs フェーズ3] → docs-agent に最終ドキュメント更新を委譲
-[完成報告]
+[要件確認]
+    ↓
+[build-agent] → 実装・コミット
+    ↓
+[test-agent]  → テスト実施・結果記録（全 PASS を確認）
+    ↓（FAIL → build-agent 修正 → test-agent 再テスト）
+[docs-agent]  → ドキュメント更新
+    ↓
+[完了報告]
 ```
 
-5. 各フェーズ完了後に品質ゲートを確認してから次フェーズへ進む
-6. 最終的にブラウザで動作するアプリが完成したことを報告する
+## 既存ファイルの確認
+
+開始前に以下を確認すること：
+- `docs/improvements.md` — 改良案の実装状況
+- `docs/test/results.md` — 過去のテスト結果
+- `git log --oneline -5` — 直近のコミット履歴

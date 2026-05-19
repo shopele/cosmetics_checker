@@ -89,14 +89,22 @@ const RULES = {
 - [ ] 履歴の localStorage 保存・読み込みが動作する
 - [ ] CSV エクスポートが動作する
 
+## 【必須ルール】実装後のテスト義務
+
+**コードを変更・実装した後は、必ず test-agent によるテストを実施すること。**
+
+- test-agent にテストを依頼し、結果が `docs/test/results.md` に記録されたことを確認する
+- **全テストが PASS になるまで修正を繰り返す**
+- FAIL が残ったままコミット・プッシュすることは禁止
+
 ## コミット・プッシュ
 
-実装完了後は必ずコミット・プッシュすること。
+**test-agent の全テスト PASS を確認してから**コミット・プッシュすること。
 
 ```bash
 git add <変更ファイル>
 git commit -m "feat: ..."
-git push -u origin claude/review-repository-CaWiV
+git push -u origin main
 ```
 
-ブランチ: `claude/review-repository-CaWiV`
+ブランチ: `main`
