@@ -289,16 +289,16 @@ async function runCheck() {
     const encodedImages = await Promise.all(selectedImages.map(resizeAndEncode));
     const prompt = buildPrompt(category);
     const response = await callAPI(encodedImages, prompt);
-    const results = parseResponse(response, category);
+    const { results, ng_expressions, extracted_text } = parseResponse(response, category);
     const overallStatus = calcOverallStatus(results);
     const usage = response.usage || null;
     const model = response.model || getSelectedModel();
 
     lastResults = results;
     lastCategory = category;
-    lastHistoryId = saveHistory({ category, results, overallStatus, imageCount: selectedImages.length, usage, model });
+    lastHistoryId = saveHistory({ category, results, ng_expressions, extracted_text, overallStatus, imageCount: selectedImages.length, usage, model });
 
-    displayResults(results, overallStatus, category, { usage, model, historyId: lastHistoryId });
+    displayResults(results, overallStatus, category, { usage, model, historyId: lastHistoryId, ng_expressions, extracted_text });
     loadHistory();
   } catch (err) {
     showError(errorMessage(err));
@@ -330,7 +330,7 @@ async function reCheckUnclearItems() {
     const encodedImages = await Promise.all(selectedImages.map(resizeAndEncode));
     const prompt = buildPromptForItems(lastCategory, unclearItems);
     const response = await callAPI(encodedImages, prompt);
-    const reResults = parseResponse(response, lastCategory);
+    const { results: reResults } = parseResponse(response, lastCategory);
 
     // unclear だった項目だけを上書き
     const unclearIds = new Set(unclearItems.map(i => i.id));
@@ -409,7 +409,16 @@ function buildPrompt(category) {
       "status": "found|not_found|unclear",
       "note": "補足（任意、簡潔に）"
     }
-  ]
+  ],
+  "ng_expressions": [
+    {
+      "expression": "発見した表現",
+      "category_id": "ng_01",
+      "category_name": "効能効果の標榜",
+      "location": "表現が見つかった場所の説明"
+    }
+  ],
+  "extracted_text": "画像から読み取ったテキスト全文"
 }
 
 statusの値の意味：
@@ -417,8 +426,22 @@ statusの値の意味：
 - not_found: 画像内に記載が確認できない
 - unclear: 画像が不鮮明等で判定できない
 
+## タスク1: 記載有無チェック
 チェック項目：
-${itemsJson}`;
+${itemsJson}
+
+## タスク2: NG表現チェック
+以下のカテゴリに該当する表現がパッケージに含まれていないか確認してください。
+該当する表現が見つかった場合は、ng_expressions 配列に追加してください。見つからない場合は空配列 [] にしてください。
+
+NG表現カテゴリ:
+- ng_01: 効能効果の標榜（医薬品的な効能効果を暗示・標榜する表現。例: シミが消える、育毛、育毛促進、アトピー、湿疹に効く）
+- ng_02: 絶対的表現（最大級・絶対的な効果を主張する表現。例: 世界一、完全に、必ず、絶対）
+- ng_03: 医療機関・専門家による推薦の偽装（医師・専門家が推薦するかのような誇大表現。例: 皮膚科医推薦、医師が認めた）
+- ng_04: 未承認の効能効果（医薬部外品のみ。承認を受けていない効能効果の表示）
+
+## タスク3: テキスト抽出
+画像から読み取れるテキストをすべて抽出し、extracted_text フィールドに入れてください。`;
 }
 
 // 指定された項目だけを対象にしたプロンプトを組み立てる（unclear 再チェック用）
@@ -449,7 +472,16 @@ function buildPromptForItems(category, items) {
       "status": "found|not_found|unclear",
       "note": "補足（任意、簡潔に）"
     }
-  ]
+  ],
+  "ng_expressions": [
+    {
+      "expression": "発見した表現",
+      "category_id": "ng_01",
+      "category_name": "効能効果の標榜",
+      "location": "表現が見つかった場所の説明"
+    }
+  ],
+  "extracted_text": "画像から読み取ったテキスト全文"
 }
 
 statusの値の意味：
@@ -457,8 +489,22 @@ statusの値の意味：
 - not_found: 画像内に記載が確認できない
 - unclear: 画像が不鮮明等で判定できない
 
+## タスク1: 記載有無チェック（再チェック）
 再チェック対象項目：
-${itemsJson}`;
+${itemsJson}
+
+## タスク2: NG表現チェック
+以下のカテゴリに該当する表現がパッケージに含まれていないか確認してください。
+該当する表現が見つかった場合は、ng_expressions 配列に追加してください。見つからない場合は空配列 [] にしてください。
+
+NG表現カテゴリ:
+- ng_01: 効能効果の標榜（医薬品的な効能効果を暗示・標榜する表現。例: シミが消える、育毛、育毛促進、アトピー、湿疹に効く）
+- ng_02: 絶対的表現（最大級・絶対的な効果を主張する表現。例: 世界一、完全に、必ず、絶対）
+- ng_03: 医療機関・専門家による推薦の偽装（医師・専門家が推薦するかのような誇大表現。例: 皮膚科医推薦、医師が認めた）
+- ng_04: 未承認の効能効果（医薬部外品のみ。承認を受けていない効能効果の表示）
+
+## タスク3: テキスト抽出
+画像から読み取れるテキストをすべて抽出し、extracted_text フィールドに入れてください。`;
 }
 
 async function callAPI(images, promptText) {
@@ -507,7 +553,7 @@ function parseResponse(responseJson, category) {
   const aiResults = parsed.results || [];
   const allItems = getAllItems(category);
 
-  return allItems.map(item => {
+  const results = allItems.map(item => {
     const ai = aiResults.find(r => r.id === item.id) || {};
     return {
       id: item.id,
@@ -519,6 +565,12 @@ function parseResponse(responseJson, category) {
       note: ai.note || ''
     };
   });
+
+  return {
+    results,
+    ng_expressions: Array.isArray(parsed.ng_expressions) ? parsed.ng_expressions : [],
+    extracted_text: typeof parsed.extracted_text === 'string' ? parsed.extracted_text : ''
+  };
 }
 
 function calcOverallStatus(results) {
@@ -599,6 +651,10 @@ function displayResults(results, overallStatus, category, opts = {}) {
   const model = opts.model || getSelectedModel();
   const costInfo = usage ? renderCostInfo(usage, model) : '';
 
+  // NG表現・抽出テキストセクション
+  const ngExpressionsSection = renderNgExpressionsSection(opts.ng_expressions);
+  const extractedTextSection = renderExtractedTextSection(opts.extracted_text);
+
   area.style.display = 'block';
   area.innerHTML = `
     <div class="result-banner ${bannerClass}">${bannerText}</div>
@@ -627,7 +683,9 @@ function displayResults(results, overallStatus, category, opts = {}) {
         </thead>
         <tbody>${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    ${ngExpressionsSection}
+    ${extractedTextSection}`;
 
   // 後付けイベント
   const reBtn = document.getElementById('reCheckBtn');
@@ -656,6 +714,45 @@ function renderCostInfo(usage, model) {
     </div>`;
 }
 
+function renderNgExpressionsSection(ngExpressions) {
+  if (!Array.isArray(ngExpressions)) return '';
+  if (ngExpressions.length === 0) {
+    return `<div class="ng-expressions-banner banner-ng-ok">NG表現なし：問題のある表現は検出されませんでした</div>`;
+  }
+  const rows = ngExpressions.map(e => `
+    <tr>
+      <td data-label="検出表現">${escapeHtml(e.expression || '')}</td>
+      <td data-label="カテゴリ">${escapeHtml(e.category_name || e.category_id || '')}</td>
+      <td data-label="場所">${escapeHtml(e.location || '')}</td>
+    </tr>
+  `).join('');
+  return `
+    <div class="ng-expressions-banner banner-ng-alert">NG表現検出：以下の表現に注意が必要です（${ngExpressions.length}件）</div>
+    <div class="table-wrapper">
+      <table class="ng-expressions-table">
+        <thead>
+          <tr>
+            <th>検出表現</th>
+            <th>カテゴリ</th>
+            <th>場所</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderExtractedTextSection(extractedText) {
+  if (!extractedText) return '';
+  return `
+    <details class="extracted-text-details">
+      <summary>AIが読み取ったテキスト（クリックして展開）</summary>
+      <pre class="extracted-text">${escapeHtml(extractedText)}</pre>
+    </details>
+  `;
+}
+
 function clearResultArea() {
   const area = document.getElementById('resultArea');
   area.innerHTML = '';
@@ -675,6 +772,8 @@ function saveHistory(entry) {
     imageCount: entry.imageCount,
     overallStatus: entry.overallStatus,
     results: entry.results,
+    ng_expressions: entry.ng_expressions || [],
+    extracted_text: entry.extracted_text || '',
     memo: '',
     usage: entry.usage || null,
     model: entry.model || null
@@ -786,7 +885,9 @@ function showHistoryDetail(id) {
   displayResults(record.results, record.overallStatus, record.category, {
     usage: record.usage,
     model: record.model,
-    historyId: record.id
+    historyId: record.id,
+    ng_expressions: record.ng_expressions || [],
+    extracted_text: record.extracted_text || ''
   });
   document.getElementById('resultArea').scrollIntoView({ behavior: 'smooth' });
 }
@@ -808,16 +909,17 @@ function exportCSV() {
   const statusLabel = s => s === 'found' ? '記載あり' : s === 'not_found' ? '記載なし' : '判定不可';
   const overallLabel = s => s === 'ok' ? '問題なし' : '要確認';
 
-  const headers = ['チェック日時', 'カテゴリ', '画像枚数', '全体判定', 'メモ', ...allItemIds.map(id => itemNames[id])];
+  const headers = ['チェック日時', 'カテゴリ', '画像枚数', '全体判定', 'NG表現件数', 'メモ', ...allItemIds.map(id => itemNames[id])];
 
   const rows = histories.map(h => {
     const dt = new Date(h.timestamp);
     const dateStr = `${dt.getFullYear()}/${String(dt.getMonth()+1).padStart(2,'0')}/${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const ngCount = (h.ng_expressions || []).length;
     const itemCols = allItemIds.map(id => {
       const r = h.results.find(r => r.id === id);
       return r ? statusLabel(r.status) : '';
     });
-    return [dateStr, h.categoryLabel, `${h.imageCount}枚`, overallLabel(h.overallStatus), h.memo || '', ...itemCols];
+    return [dateStr, h.categoryLabel, `${h.imageCount}枚`, overallLabel(h.overallStatus), ngCount, h.memo || '', ...itemCols];
   });
 
   const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
