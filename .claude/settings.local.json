@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "PowerShell(if \\(-not $?\\) { \"Directory is empty or does not exist\" })",
+      "PowerShell(*)",
+      "Bash(*)",
+      "Edit",
+      "Write",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__Claude_Preview__preview_start"
+    ],
+    "defaultMode": "bypassPermissions"
+  },
+  "skipDangerousModePermissionPrompt": true
+}

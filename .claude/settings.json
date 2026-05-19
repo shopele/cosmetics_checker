@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "allow": [
+      "PowerShell(*)",
+      "Bash(*)",
+      "Edit",
+      "Write",
+      "WebFetch(*)",
+      "WebSearch(*)"
+    ]
+  },
+  "skipDangerousModePermissionPrompt": true
+}
