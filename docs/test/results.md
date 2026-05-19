@@ -285,3 +285,55 @@ URL: https://cosmetics-checker.vercel.app
 - **Problem #9 (Low)**: `setupCustomItemsUI()` がメインの初期化フロー内に統合済み。コード保守性が向上した。
 
 High/Medium の全バグが修正済みであるため、総合判定は PASS とする。
+
+---
+
+## 改良A・B テスト（コミット 2873a7f）
+
+実施日: 2026-05-19
+
+### 改良A: 表現チェック機能
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| A-1 | NG_EXPRESSION_CATEGORIES の定義 | PASS | `rules.js` L135-140 に ng_01〜ng_04 の4カテゴリが定義済み。id / name / description / examples 各フィールドも完備 |
+| A-2 | プロンプトへのNG表現チェック指示追加 | PASS | `buildPrompt()` L433-444 と `buildPromptForItems()` L496-507 の両方に「タスク2: NG表現チェック」セクションが追加されており、ng_01〜ng_04 の説明と ng_expressions 配列の返却指示が含まれている |
+| A-3 | parseResponse() の ng_expressions 取得 | PASS | L571 `Array.isArray(parsed.ng_expressions) ? parsed.ng_expressions : []` により、未定義・非配列時は空配列を返す安全な実装 |
+| A-4 | renderNgExpressionsSection() 0件時（緑バナー） | PASS | L719-720 で `ngExpressions.length === 0` の場合に `banner-ng-ok` クラスの「NG表現なし」バナーを返す |
+| A-5 | renderNgExpressionsSection() 1件以上（赤バナー+テーブル） | PASS | L730-743 で `banner-ng-alert` クラスのバナー + 検出表現・カテゴリ・場所の3列テーブルを返す |
+| A-6 | XSS対策（escapeHtml 適用） | PASS | L724-726 で `e.expression`, `e.category_name`, `e.location` の全フィールドに `escapeHtml()` を適用済み |
+| A-7 | saveHistory() への ng_expressions 追加 | PASS | L775 `ng_expressions: entry.ng_expressions \|\| []` として履歴レコードに保存されている |
+| A-8 | exportCSV() への NG表現件数列追加 | PASS | L912 の headers 配列に `'NG表現件数'` が含まれ、L917 で `(h.ng_expressions \|\| []).length` を ngCount として計算し L922 で出力 |
+
+### 改良B: 抽出テキスト表示
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| B-1 | プロンプトへのテキスト抽出指示追加 | PASS | `buildPrompt()` L443-444 と `buildPromptForItems()` L506-507 の両方に「タスク3: テキスト抽出」セクションが含まれ、extracted_text フィールドへの格納を指示している |
+| B-2 | parseResponse() の extracted_text 取得 | PASS | L572 `typeof parsed.extracted_text === 'string' ? parsed.extracted_text : ''` により null / undefined / 非文字列時は空文字列を返す安全な実装 |
+| B-3 | renderExtractedTextSection() の details 折りたたみ | PASS | L748-753 で `<details class="extracted-text-details">` + `<summary>` + `<pre>` の構成による折りたたみ表示を実装 |
+| B-4 | XSS対策（escapeHtml 適用） | PASS | L751 で `escapeHtml(extractedText)` を `<pre>` タグ内に適用済み |
+
+### デグレード確認
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| D-1 | reCheckUnclearItems() の新戻り値対応 | PASS | L333 で `const { results: reResults } = parseResponse(response, lastCategory)` と分割代入により、新戻り値 `{ results, ng_expressions, extracted_text }` から results のみを正しく取得している |
+| D-2 | showHistoryDetail() の新フィールド受け渡し | PASS | L885-891 で `ng_expressions: record.ng_expressions \|\| []` と `extracted_text: record.extracted_text \|\| ''` を opts として `displayResults()` に渡しており、過去履歴表示時も新セクションが正しく描画される |
+
+### 総合判定: PASS
+
+全12テスト項目（A-1〜A-8、B-1〜B-4、D-1〜D-2）が PASS。Critical / High バグの発見なし。
+
+改良Aは `NG_EXPRESSION_CATEGORIES` の定義から、プロンプト指示・JSON取得・レンダリング・XSS対策・履歴保存・CSVエクスポートまでの一連のフローが正しく実装されている。改良Bは `extracted_text` フィールドの取得から `<details>` 折りたたみ表示・XSS対策まで適切に実装されている。デグレードも発生していない。
+
+### ブラウザでの確認依頼
+URL: https://cosmetics-checker.vercel.app
+
+以下の動作を確認してください：
+
+1. **NG表現チェック（0件）**: パッケージ画像をアップロードしてチェック実行し、NG表現が検出されない場合に「NG表現なし：問題のある表現は検出されませんでした」という緑バナーが結果エリアに表示されるか
+2. **NG表現チェック（1件以上）**: 「世界一」「皮膚科医推薦」などのNG表現を含む画像でチェック実行し、赤バナーと検出表現テーブル（検出表現・カテゴリ・場所の列）が表示されるか
+3. **抽出テキスト表示**: チェック実行後に「AIが読み取ったテキスト（クリックして展開）」という折りたたみセクションが表示され、クリックで展開・テキストが表示されるか
+4. **CSV出力**: 「CSVエクスポート」ボタンでダウンロードされたCSVファイルに「NG表現件数」列が含まれているか
+5. **履歴からの再表示**: 過去履歴の「詳細」ボタンをクリックした際に、NG表現セクションと抽出テキストセクションが正しく表示されるか
