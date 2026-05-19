@@ -23,6 +23,12 @@ function getClientIp(req) {
 
 function getRateLimitInfo(ip) {
   const now = Date.now();
+  // 期限切れエントリのクリーンアップ（メモリリーク防止）
+  for (const [key, val] of ipRequestCounts.entries()) {
+    if (now > val.resetAt) {
+      ipRequestCounts.delete(key);
+    }
+  }
   const info = ipRequestCounts.get(ip);
   if (!info || now > info.resetAt) {
     const newInfo = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };

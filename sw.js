@@ -44,7 +44,10 @@ self.addEventListener('fetch', event => {
             caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
           }
           return res;
-        }).catch(() => cached);
+        }).catch(() => cached || new Response(
+          'オフラインです。ネットワーク接続を確認してください。',
+          { status: 503, statusText: 'Service Unavailable', headers: { 'Content-Type': 'text/plain; charset=utf-8' } }
+        ));
       })
     );
   }

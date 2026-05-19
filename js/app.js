@@ -8,9 +8,9 @@ const MAX_IMAGE_PX = 1600;
 
 // 利用可能なモデル（簡易価格表: USD per 1M tokens）
 const MODELS = {
-  'claude-opus-4-7':    { label: 'Opus 4.7（精度重視）',    input: 15,   output: 75   },
-  'claude-sonnet-4-5':  { label: 'Sonnet 4.5（バランス）',  input: 3,    output: 15   },
-  'claude-haiku-4-5':   { label: 'Haiku 4.5（速度重視）',   input: 1,    output: 5    }
+  'claude-opus-4-7':              { label: 'Opus 4.7（精度重視）',    input: 15,   output: 75   },
+  'claude-sonnet-4-6':            { label: 'Sonnet 4.6（バランス）',  input: 3,    output: 15   },
+  'claude-haiku-4-5-20251001':    { label: 'Haiku 4.5（速度重視）',   input: 1,    output: 5    }
 };
 
 function getSelectedModel() {
@@ -51,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupCheckButton();
   setupExportButton();
   setupClearImagesButton();
+  setupCustomItemsUI();
   registerServiceWorker();
 });
 
@@ -903,9 +904,6 @@ function setupCustomItemsUI() {
     renderCustomItemsUI();
   });
 }
-
-// 初期化に組み込み
-document.addEventListener('DOMContentLoaded', setupCustomItemsUI);
 
 function escapeHtml(str) {
   return String(str)
