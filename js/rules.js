@@ -131,3 +131,10 @@ const RULES = {
     ]
   }
 };
+
+const NG_EXPRESSION_CATEGORIES = [
+  { id: 'ng_01', name: '効能効果の標榜', description: '医薬品的な効能効果を暗示・標榜する表現', examples: ['シミが消える', '育毛', '育毛促進', 'アトピー', '湿疹に効く'] },
+  { id: 'ng_02', name: '絶対的表現', description: '最大級・絶対的な効果を主張する表現', examples: ['世界一', '完全に', '必ず', '絶対'] },
+  { id: 'ng_03', name: '医療機関・専門家による推薦の偽装', description: '医師・専門家が推薦するかのような誇大表現', examples: ['皮膚科医推薦', '医師が認めた'] },
+  { id: 'ng_04', name: '未承認の効能効果（医薬部外品のみ）', description: '承認を受けていない効能効果の表示', examples: [] }
+];
