@@ -255,3 +255,33 @@ URL: https://cosmetics-checker.vercel.app
 5. **EXIF 補正**: スマホ縦撮り JPEG（orientation=6）をアップロードしてプレビューが正立表示されるか
 6. **Service Worker**: 初回アクセス後にオフラインでページを開いて UI が表示されるか
 7. **タッチデバイス**: スマートフォンでアクセスしてドロップゾーンの文言が「タップして画像を選択」に変わるか
+
+---
+
+## バグ修正再テスト（コミット e8d25ba）
+
+実施日: 2026-05-19
+
+| バグ# | 重大度 | ファイル | 修正確認 | 判定 |
+|---|---|---|---|---|
+| #5 | High | server.js | `import { join, dirname } from 'path'` で `join` が named import に追加され、18行目の `path.join(__dirname)` が `join(__dirname)` に変更されていることを確認 | PASS |
+| #6 | Medium | api/check.js | `getRateLimitInfo()` 先頭（L27-31）に `for (const [key, val] of ipRequestCounts.entries()) { if (now > val.resetAt) ipRequestCounts.delete(key); }` のクリーンアップループが追加されていることを確認 | PASS |
+| #7 | Medium | js/app.js | `MODELS` 定数の12行目が `'claude-sonnet-4-6'`、13行目が `'claude-haiku-4-5-20251001'` に修正されていることを確認 | PASS |
+| #8 | Low | sw.js | L47-50 の `.catch()` が `() => cached` のみから `() => cached \|\| new Response('オフラインです。ネットワーク接続を確認してください。', { status: 503, statusText: 'Service Unavailable', headers: { 'Content-Type': 'text/plain; charset=utf-8' } })` に変更されていることを確認 | PASS |
+| #9 (Problem) | Low | js/app.js | `setupCustomItemsUI()` がメインの `DOMContentLoaded` ハンドラ内（L54）に統合済みであり、独立した `DOMContentLoaded` ハンドラが存在しないことを確認 | PASS |
+
+### 総合判定: PASS
+
+**判定基準**: High/Medium バグが全て修正済みであること
+
+### 再テスト結論
+
+コミット `e8d25ba` で修正された5件（Bug #5〜#8、Problem #9）全ての修正を静的コード検証により確認した。
+
+- **Bug #5 (High)**: `server.js` の `path is not defined` エラーは、`join` を named import に追加し `path.join()` → `join()` に変更することで解消済み。`node server.js` 起動時のクラッシュが修正された。
+- **Bug #6 (Medium)**: `api/check.js` の `getRateLimitInfo()` 先頭に期限切れエントリ削除ループが追加され、長時間稼働時の `ipRequestCounts` Map 肥大化が防止された。
+- **Bug #7 (Medium)**: `MODELS` 定数のモデルIDが `claude-sonnet-4-6`・`claude-haiku-4-5-20251001` に修正済み。Anthropic API の正規モデルIDが使用されるようになった。
+- **Bug #8 (Low)**: `sw.js` のキャッシュミス時に `undefined` を返していた箇所が 503 Response を返すよう修正済み。オフライン時のブラウザエラーが解消された。
+- **Problem #9 (Low)**: `setupCustomItemsUI()` がメインの初期化フロー内に統合済み。コード保守性が向上した。
+
+High/Medium の全バグが修正済みであるため、総合判定は PASS とする。
