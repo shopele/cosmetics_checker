@@ -1,4 +1,4 @@
-const DEFAULT_API_MODEL = 'claude-opus-4-7';
+const DEFAULT_API_MODEL = 'claude-sonnet-4-6';
 const STORAGE_KEY_HISTORY = 'yakki_checker_history';
 const STORAGE_KEY_MODEL = 'yakki_checker_model';
 const STORAGE_KEY_CUSTOM_ITEMS = 'yakki_checker_custom_items';
@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
   sessionStorage.removeItem(SESSION_KEY_RUNNING);
 
   applyTouchDeviceText();
-  setupModelSelector();
   setupHistoryFilters();
   loadHistory();
   setupDropZone();
@@ -888,6 +887,11 @@ function setupCustomItemsUI() {
   const input = document.getElementById('customItemInput');
   if (!toggle || !panel || !addBtn || !input) return;
 
+  addBtn.disabled = true;
+  input.addEventListener('input', () => {
+    addBtn.disabled = input.value.trim() === '';
+  });
+
   toggle.addEventListener('click', () => {
     const visible = panel.style.display !== 'none';
     panel.style.display = visible ? 'none' : 'block';
@@ -901,6 +905,7 @@ function setupCustomItemsUI() {
     items.push({ id: 'custom_' + Date.now(), name });
     setCustomItems(items);
     input.value = '';
+    addBtn.disabled = true;
     renderCustomItemsUI();
   });
 }

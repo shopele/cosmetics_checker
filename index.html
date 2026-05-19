@@ -36,17 +36,12 @@
     </div>
 
     <div class="settings-row">
-      <label for="modelSelect" class="settings-label">AIモデル</label>
-      <select id="modelSelect" class="select-input"></select>
-    </div>
-
-    <div class="settings-row">
       <button type="button" class="btn btn-ghost" id="customItemsToggle" style="color: var(--primary)">＋ カスタムチェック項目（社内基準）</button>
     </div>
     <div id="customItemsPanel" class="custom-items-panel" style="display:none">
       <div class="custom-items-add">
         <input type="text" id="customItemInput" placeholder="例: 自社ブランドロゴの記載" />
-        <button class="btn btn-secondary" id="addCustomItemBtn">追加</button>
+        <button class="btn btn-secondary" id="addCustomItemBtn" disabled>追加</button>
       </div>
       <div id="customItemsList" class="custom-items-list"></div>
     </div>
