@@ -169,3 +169,75 @@
 
 - デスクトップ（1024px以上）: 2カラムレイアウト（設定エリア・画像エリアを横並び）
 - タブレット以下（1023px以下）: 1カラムレイアウト
+
+---
+
+## 6. デバイス別動作状況と改良案
+
+### 6.1 現状評価
+
+| デバイス | 動作状況 | 備考 |
+|---|---|---|
+| PC ブラウザ | 問題なし | 設計通り |
+| タブレット | ほぼ問題なし | `max-width: 960px` でセンタリング、テーブルは横スクロール可、タップ操作も動作 |
+| スマートフォン | 使えるが不便な点あり | 下記2点を参照 |
+
+### 6.2 スマートフォンでの課題
+
+| # | 課題 | 内容 |
+|---|---|---|
+| SP-01 | ドロップゾーンの文言 | 「ドラッグ＆ドロップ」とあるがスマホではタップのみ有効（動作はする） |
+| SP-02 | 結果・履歴テーブル | 5〜6列あるため横スクロールが必要になる場合がある |
+
+### 6.3 改良案
+
+#### SP-01 対応: ドロップゾーン文言のデバイス切り替え
+
+**実装方針**: `navigator.maxTouchPoints` でタッチデバイスを判定し、文言を動的に切り替える。
+
+```js
+// JS での判定例
+const isTouch = navigator.maxTouchPoints > 0;
+dropZoneText.textContent = isTouch
+  ? 'タップして画像を選択'
+  : '画像をドラッグ＆ドロップ、またはクリックして選択';
+```
+
+CSS `@media (hover: none)` との併用で、ドラッグ関連の視覚効果（ホバー強調）もスマホでは非表示にできる。
+
+#### SP-02 対応: 結果テーブルのカード型レイアウト
+
+**実装方針**: `@media (max-width: 640px)` でテーブルをカード型に切り替える。
+
+```css
+@media (max-width: 640px) {
+  .result-table thead { display: none; }
+  .result-table tr {
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+  .result-table td {
+    display: flex;
+    justify-content: space-between;
+    border: none;
+    padding: 4px 0;
+  }
+  .result-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--subtext);
+  }
+}
+```
+
+HTML 側で `<td data-label="項目名">` のように `data-label` 属性を付与する必要がある。
+
+### 6.4 優先度
+
+| 改良案 | 優先度 | 工数 |
+|---|---|---|
+| SP-01: ドロップゾーン文言切り替え | 中 | 小（JS 数行 + CSS 数行） |
+| SP-02: 結果テーブルのカード型化 | 中 | 中（HTML 属性追加 + CSS） |
