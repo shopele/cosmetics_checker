@@ -1,13 +1,28 @@
 const API_MODEL = 'claude-opus-4-7';
 const STORAGE_KEY_HISTORY = 'yakki_checker_history';
+const SESSION_KEY_RUNNING = 'yakki_checker_running';
 const MAX_HISTORY = 50;
-const MAX_IMAGE_PX = 1920;
+const MAX_IMAGE_PX = 1600;
+
+// 元ファイルサイズに応じた JPEG 品質
+function jpegQualityForSize(byteSize) {
+  if (byteSize < 1 * 1024 * 1024) return 0.85;
+  if (byteSize < 3 * 1024 * 1024) return 0.75;
+  return 0.65;
+}
 
 let selectedImages = [];
+// 直近のチェック結果（unclear 再チェック用に保持）
+let lastResults = null;
+let lastCategory = null;
+let lastHistoryId = null;
 
 // ── 初期化 ──────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', () => {
+  // 前回のページクラッシュ等で残った実行中フラグをクリア
+  sessionStorage.removeItem(SESSION_KEY_RUNNING);
+
   loadHistory();
   setupDropZone();
   setupFileInput();
@@ -100,6 +115,7 @@ function renderPreviews() {
 
 function resizeAndEncode(file) {
   return new Promise((resolve, reject) => {
+    const quality = jpegQualityForSize(file.size);
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
@@ -114,7 +130,7 @@ function resizeAndEncode(file) {
         canvas.width = width;
         canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
         resolve({
           data: dataUrl.split(',')[1],
           media_type: 'image/jpeg'
@@ -131,7 +147,13 @@ function resizeAndEncode(file) {
 // ── チェック実行 ──────────────────────────────────────────────
 
 function setupCheckButton() {
-  document.getElementById('checkBtn').addEventListener('click', runCheck);
+  document.getElementById('checkBtn').addEventListener('click', () => {
+    if (sessionStorage.getItem(SESSION_KEY_RUNNING)) {
+      showError('チェックが実行中です。完了までお待ちください。');
+      return;
+    }
+    runCheck();
+  });
 }
 
 function updateCheckButton() {
@@ -143,6 +165,7 @@ async function runCheck() {
 
   const category = document.querySelector('input[name="category"]:checked').value;
 
+  sessionStorage.setItem(SESSION_KEY_RUNNING, '1');
   setLoading(true);
   hideError();
   clearResultArea();
@@ -154,12 +177,64 @@ async function runCheck() {
     const results = parseResponse(response, category);
     const overallStatus = calcOverallStatus(results);
 
+    lastResults = results;
+    lastCategory = category;
+    lastHistoryId = saveHistory({ category, results, overallStatus, imageCount: selectedImages.length });
+
     displayResults(results, overallStatus, category);
-    saveHistory({ category, results, overallStatus, imageCount: selectedImages.length });
     loadHistory();
   } catch (err) {
     showError(errorMessage(err));
   } finally {
+    sessionStorage.removeItem(SESSION_KEY_RUNNING);
+    setLoading(false);
+  }
+}
+
+// ── unclear 項目の個別再チェック ─────────────────────────────
+async function reCheckUnclearItems() {
+  if (!lastResults || !lastCategory) return;
+  const unclearItems = lastResults.filter(r => r.status === 'unclear');
+  if (unclearItems.length === 0) return;
+  if (selectedImages.length === 0) {
+    showError('再チェックには元の画像が必要です。画像を再度アップロードしてください。');
+    return;
+  }
+  if (sessionStorage.getItem(SESSION_KEY_RUNNING)) {
+    showError('チェックが実行中です。完了までお待ちください。');
+    return;
+  }
+
+  sessionStorage.setItem(SESSION_KEY_RUNNING, '1');
+  setLoading(true);
+  hideError();
+
+  try {
+    const encodedImages = await Promise.all(selectedImages.map(resizeAndEncode));
+    const prompt = buildPromptForItems(lastCategory, unclearItems);
+    const response = await callAPI(encodedImages, prompt);
+    const reResults = parseResponse(response, lastCategory);
+
+    // unclear だった項目だけを上書き
+    const unclearIds = new Set(unclearItems.map(i => i.id));
+    const merged = lastResults.map(r => {
+      if (!unclearIds.has(r.id)) return r;
+      const re = reResults.find(rr => rr.id === r.id);
+      return re ? { ...r, status: re.status, note: re.note } : r;
+    });
+
+    const overallStatus = calcOverallStatus(merged);
+    lastResults = merged;
+
+    // 履歴を上書き保存
+    updateHistory(lastHistoryId, { results: merged, overallStatus });
+
+    displayResults(merged, overallStatus, lastCategory);
+    loadHistory();
+  } catch (err) {
+    showError(errorMessage(err));
+  } finally {
+    sessionStorage.removeItem(SESSION_KEY_RUNNING);
     setLoading(false);
   }
 }
