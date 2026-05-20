@@ -551,13 +551,18 @@ async function callAPI(images, promptText) {
 }
 
 function parseResponse(responseJson, category) {
-  const text = responseJson.content?.[0]?.text || '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('AIの応答からJSONを取得できませんでした。');
+  const textBlocks = Array.isArray(responseJson.content)
+    ? responseJson.content.filter(block => block?.type === 'text').map(block => block.text || '')
+    : [];
+  const text = textBlocks.join('\n').trim();
+  if (!text) throw new Error('AIの応答からJSONを取得できませんでした。');
+
+  const jsonCandidate = extractJsonCandidate(text);
+  if (!jsonCandidate) throw new Error('AIの応答からJSONを取得できませんでした。');
 
   let parsed;
   try {
-    parsed = JSON.parse(jsonMatch[0]);
+    parsed = JSON.parse(jsonCandidate);
   } catch {
     throw new Error('AIの応答のJSONが解析できませんでした。');
   }
@@ -585,6 +590,71 @@ function parseResponse(responseJson, category) {
     ng_expressions: Array.isArray(parsed.ng_expressions) ? parsed.ng_expressions : [],
     extracted_text: typeof parsed.extracted_text === 'string' ? parsed.extracted_text : ''
   };
+}
+
+function extractJsonCandidate(text) {
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fenced?.[1]) {
+    const candidate = fenced[1].trim();
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch { /* continue */ }
+  }
+
+  try {
+    JSON.parse(text);
+    return text;
+  } catch { /* continue */ }
+
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    const candidate = extractBalancedObject(text, start);
+    if (!candidate) continue;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch { /* continue */ }
+  }
+
+  return null;
+}
+
+function extractBalancedObject(text, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === '{') {
+      depth++;
+      continue;
+    }
+
+    if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+      if (depth < 0) return null;
+    }
+  }
+
+  return null;
 }
 
 function calcOverallStatus(results) {
@@ -779,11 +849,13 @@ function renderNgExpressionsSection(ngExpressions) {
 }
 
 function renderExtractedTextSection(extractedText) {
-  if (!extractedText) return '';
+  const content = extractedText
+    ? `<pre class="extracted-text">${escapeHtml(extractedText)}</pre>`
+    : `<p class="extracted-text-empty">テキストは読み取れませんでした</p>`;
   return `
     <details class="extracted-text-details">
       <summary>AIが読み取ったテキスト（クリックして展開）</summary>
-      <pre class="extracted-text">${escapeHtml(extractedText)}</pre>
+      ${content}
     </details>
   `;
 }

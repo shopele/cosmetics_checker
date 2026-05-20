@@ -144,7 +144,7 @@ test.describe('チェック実行テスト（実画像）', () => {
     await expect(page.locator('#resultArea')).toBeVisible({ timeout: 60000 });
 
     // 履歴テーブルに新しい行が追加されている
-    const historyRow = page.locator('#historyTableBody tr').first();
+    const historyRow = page.locator('#historyBody tr').first();
     await expect(historyRow).toBeVisible();
     await expect(historyRow).toContainText('化粧品');
   });

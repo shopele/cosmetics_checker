@@ -1,0 +1,11 @@
+# Copilot コンテキストから除外するファイル
+# 秘密情報を含むファイルを絶対に送信しない
+
+.env
+.env.*
+.env.local
+.env*.local
+*.pem
+*.key
+*.p12
+*.pfx
