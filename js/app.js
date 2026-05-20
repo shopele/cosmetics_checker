@@ -337,7 +337,7 @@ async function reCheckUnclearItems() {
     const merged = lastResults.map(r => {
       if (!unclearIds.has(r.id)) return r;
       const re = reResults.find(rr => rr.id === r.id);
-      return re ? { ...r, status: re.status, note: re.note } : r;
+      return re ? { ...r, status: re.status, note: re.note, reason: re.reason || '', suggestion: re.suggestion || '' } : r;
     });
 
     const overallStatus = calcOverallStatus(merged);
@@ -407,7 +407,9 @@ function buildPrompt(category) {
       "id": "項目ID",
       "name": "項目名",
       "status": "found|not_found|unclear",
-      "note": "補足（任意、簡潔に）"
+      "note": "補足（任意、簡潔に）",
+      "reason": "not_found または unclear の場合: なぜこの項目が確認できないかの説明",
+      "suggestion": "not_found または unclear の場合: どのように改善すればよいかの具体的な提案"
     }
   ],
   "ng_expressions": [
@@ -425,6 +427,10 @@ statusの値の意味：
 - found: 画像内に記載が確認できる
 - not_found: 画像内に記載が確認できない
 - unclear: 画像が不鮮明等で判定できない
+
+判定が not_found または unclear の場合は、以下のフィールドも返してください：
+- "reason": なぜこの項目が確認できないかの説明
+- "suggestion": どのように改善すればよいかの具体的な提案
 
 ## タスク1: 記載有無チェック
 チェック項目：
@@ -470,7 +476,9 @@ function buildPromptForItems(category, items) {
       "id": "項目ID",
       "name": "項目名",
       "status": "found|not_found|unclear",
-      "note": "補足（任意、簡潔に）"
+      "note": "補足（任意、簡潔に）",
+      "reason": "not_found または unclear の場合: なぜこの項目が確認できないかの説明",
+      "suggestion": "not_found または unclear の場合: どのように改善すればよいかの具体的な提案"
     }
   ],
   "ng_expressions": [
@@ -488,6 +496,10 @@ statusの値の意味：
 - found: 画像内に記載が確認できる
 - not_found: 画像内に記載が確認できない
 - unclear: 画像が不鮮明等で判定できない
+
+判定が not_found または unclear の場合は、以下のフィールドも返してください：
+- "reason": なぜこの項目が確認できないかの説明
+- "suggestion": どのように改善すればよいかの具体的な提案
 
 ## タスク1: 記載有無チェック（再チェック）
 再チェック対象項目：
@@ -562,7 +574,9 @@ function parseResponse(responseJson, category) {
       required: item.required,
       requiredType: item.requiredType,
       status: ai.status || 'unclear',
-      note: ai.note || ''
+      note: ai.note || '',
+      reason: ai.reason || '',
+      suggestion: ai.suggestion || ''
     };
   });
 
@@ -621,6 +635,21 @@ function displayResults(results, overallStatus, category, opts = {}) {
     const statusLabel = r.status === 'found' ? '✓ 記載あり' : r.status === 'not_found' ? '✗ 記載なし' : '? 判定不可';
     const requiredLabel = r.requiredType === 'mandatory' ? '必須' : r.requiredType === 'custom' ? 'カスタム' : '条件付き';
     const badgeClass = r.requiredType === 'mandatory' ? 'badge-mandatory' : r.requiredType === 'custom' ? 'badge-custom' : 'badge-conditional';
+
+    const hasDetail = (r.status === 'not_found' || r.status === 'unclear') && (r.reason || r.suggestion);
+    const detailRow = hasDetail ? `
+      <tr class="detail-row">
+        <td colspan="6">
+          <details class="result-detail">
+            <summary>詳細・改善案を表示</summary>
+            <div class="detail-content">
+              ${r.reason ? `<p class="detail-reason">理由: ${escapeHtml(r.reason)}</p>` : ''}
+              ${r.suggestion ? `<p class="detail-suggestion">改善案: ${escapeHtml(r.suggestion)}</p>` : ''}
+            </div>
+          </details>
+        </td>
+      </tr>` : '';
+
     return `
       <tr>
         <td data-label="#">${i + 1}</td>
@@ -629,7 +658,7 @@ function displayResults(results, overallStatus, category, opts = {}) {
         <td data-label="区分"><span class="required-badge ${badgeClass}">${requiredLabel}</span></td>
         <td class="${statusClass}" data-label="判定">${statusLabel}</td>
         <td class="note-col" data-label="備考">${escapeHtml(r.note)}</td>
-      </tr>`;
+      </tr>${detailRow}`;
   }).join('');
 
   // 再チェックボタン
@@ -719,13 +748,18 @@ function renderNgExpressionsSection(ngExpressions) {
   if (ngExpressions.length === 0) {
     return `<div class="ng-expressions-banner banner-ng-ok">NG表現なし：問題のある表現は検出されませんでした</div>`;
   }
-  const rows = ngExpressions.map(e => `
-    <tr>
-      <td data-label="検出表現">${escapeHtml(e.expression || '')}</td>
-      <td data-label="カテゴリ">${escapeHtml(e.category_name || e.category_id || '')}</td>
-      <td data-label="場所">${escapeHtml(e.location || '')}</td>
-    </tr>
-  `).join('');
+  const rows = ngExpressions.map(e => {
+    const cat = NG_EXPRESSION_CATEGORIES.find(c => c.id === e.category_id);
+    const suggestionText = cat?.suggestion || '―';
+    return `
+      <tr>
+        <td data-label="検出表現">${escapeHtml(e.expression || '')}</td>
+        <td data-label="カテゴリ">${escapeHtml(e.category_name || e.category_id || '')}</td>
+        <td data-label="場所">${escapeHtml(e.location || '')}</td>
+        <td data-label="言い換え候補">${escapeHtml(suggestionText)}</td>
+      </tr>
+    `;
+  }).join('');
   return `
     <div class="ng-expressions-banner banner-ng-alert">NG表現検出：以下の表現に注意が必要です（${ngExpressions.length}件）</div>
     <div class="table-wrapper">
@@ -735,6 +769,7 @@ function renderNgExpressionsSection(ngExpressions) {
             <th>検出表現</th>
             <th>カテゴリ</th>
             <th>場所</th>
+            <th>言い換え候補</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>

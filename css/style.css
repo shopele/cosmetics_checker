@@ -698,3 +698,54 @@ input[type="text"]:focus {
   .drop-zone:hover { background: transparent; color: var(--subtext); border-color: var(--border); }
   .drop-zone.touch-device { background: #F9FAFB; }
 }
+
+/* ── Phase 1.1: 判定詳細・改善案 ── */
+.detail-row td {
+  background: #F8FAFF;
+  padding: 0 12px 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.result-detail {
+  border-left: 3px solid var(--primary);
+  padding: 8px 12px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: #EFF6FF;
+}
+
+.result-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 600;
+  user-select: none;
+}
+
+.result-detail summary:hover {
+  text-decoration: underline;
+}
+
+.detail-content {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-reason {
+  font-size: 13px;
+  color: var(--subtext);
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--warning);
+}
+
+.detail-suggestion {
+  font-size: 13px;
+  color: var(--text);
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--success);
+}

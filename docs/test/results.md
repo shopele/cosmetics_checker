@@ -349,3 +349,65 @@ URL: https://cosmetics-checker.vercel.app
 3. **抽出テキスト表示**: チェック実行後に「AIが読み取ったテキスト（クリックして展開）」という折りたたみセクションが表示され、クリックで展開・テキストが表示されるか
 4. **CSV出力**: 「CSVエクスポート」ボタンでダウンロードされたCSVファイルに「NG表現件数」列が含まれているか
 5. **履歴からの再表示**: 過去履歴の「詳細」ボタンをクリックした際に、NG表現セクションと抽出テキストセクションが正しく表示されるか
+
+---
+
+## Phase 1 テスト（実装: develop/staging）
+
+実施日: 2026-05-20
+
+### Phase 1.1: 判定理由・代替案の詳細化
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| T1-1 | rules.js 化粧品全項目に reason/law_reference/suggestion が定義されている | PASS | cs_01〜cs_07 の全7項目に reason/law_reference/suggestion が存在することを確認 |
+| T1-2 | rules.js 医薬部外品全項目に reason/law_reference/suggestion が定義されている | PASS | qd_01〜qd_10 の全10項目に reason/law_reference/suggestion が存在することを確認 |
+| T1-3 | プロンプトに理由・改善案の返却指示が含まれている | PASS | buildPrompt() と buildPromptForItems() の両方に reason/suggestion の返却指示あり |
+| T1-4 | parseResponse() が reason/suggestion を取り出す | PASS | `reason: ai.reason \|\| ''` / `suggestion: ai.suggestion \|\| ''` でフィールドなし時は空文字列 |
+| T1-5 | not_found の行に詳細表示が追加される | PASS | `hasDetail = (r.status === 'not_found' \|\| r.status === 'unclear') && (r.reason \|\| r.suggestion)` で detail-row が生成される |
+| T1-6 | unclear の行に詳細表示が追加される | PASS | T1-5 と同一条件で unclear も対象に含まれる |
+| T1-7 | found の行に詳細表示が表示されない | PASS | `hasDetail` 条件が found 時は false となり `detailRow = ''` |
+| T1-8 | XSS対策（reason/suggestion に escapeHtml 適用） | PASS | detail-reason / detail-suggestion の両方で `escapeHtml()` が適用済み |
+| T1-9 | showHistoryDetail() または履歴表示でも詳細が反映される | PASS | showHistoryDetail() が record.results（reason/suggestion を含む）をそのまま displayResults() に渡しており、詳細が正しく表示される |
+
+### Phase 1.2: NG表現の改善案提示
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| T2-1 | NG_EXPRESSION_CATEGORIES 全4項目に suggestion が定義されている | PASS | ng_01〜ng_04 の全4カテゴリに suggestion フィールドが存在することを確認 |
+| T2-2 | NG表現テーブルに「言い換え候補」列がある | PASS | renderNgExpressionsSection() の thead に `<th>言い換え候補</th>`、tbody の各行に対応する td が存在する |
+| T2-3 | suggestion 未定義時に「―」が表示される | PASS | `const suggestionText = cat?.suggestion \|\| '―';` でフォールバックが実装されている |
+| T2-4 | XSS対策（suggestion に escapeHtml 適用） | PASS | `${escapeHtml(suggestionText)}` として escapeHtml() が適用済み |
+
+### デグレード確認
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| D-1 | found の項目が正常に表示される | PASS | hasDetail が false の場合 detailRow = '' で既存の6列表示に変化なし |
+| D-2 | 要約バッジが正常に表示される | PASS | counts 集計・summaryBadges 生成ロジックに変更なし |
+| D-3 | 履歴保存・CSV エクスポートの既存フィールドに影響なし | PASS | saveHistory() は results 配列全体を保存。exportCSV() は status のみ出力するため既存列定義に影響なし |
+| D-4 | reCheckUnclearItems() が正常に動作する | PASS | マージ処理が `{ ...r, status: re.status, note: re.note, reason: re.reason \|\| '', suggestion: re.suggestion \|\| '' }` となっており reason/suggestion も正しく更新される |
+
+### ブラウザでの確認依頼
+URL: https://cosmetics-checker.vercel.app
+
+以下の動作を確認してください：
+
+1. **判定詳細の表示**: チェック実行後に not_found または unclear の結果行に「詳細・改善案を表示」というアコーディオン（details 要素）が表示されるか
+2. **詳細内容の確認**: アコーディオンを開いた際に「理由:」と「改善案:」が表示され、内容が適切か
+3. **found 行に詳細非表示**: found（記載あり）の行にはアコーディオンが表示されないか
+4. **NG表現テーブルの言い換え候補**: NG表現が検出された場合に、テーブルの「言い換え候補」列に適切な言い換え案が表示されるか
+5. **スマートフォン表示**: モバイル端末でのカード型レイアウトで detail-row が正しく表示されるか（detail-row td は `display: block` になるかどうか CSS を確認要）
+
+### 問題点・改善提案
+
+#### 軽微な問題: モバイル表示での detail-row スタイル
+**重大度**: Low
+**カテゴリ**: UI不具合
+**対象ファイル・行**: css/style.css L558-583
+**問題内容**: スマートフォン用のカード型レイアウト（`@media (max-width: 640px)`）で、`.result-table tr` に `border` や `padding` を付与しているが、detail-row の `<tr>` に対する専用のスタイル上書きがないため、detail-row がメイン行と同様にボーダー付きカードとして表示される可能性がある。
+**修正案**: `@media (max-width: 640px)` 内に `.detail-row { border: none; margin-bottom: 0; padding: 0; }` を追加する。
+
+### 総合判定: PASS
+
+全13テスト項目（T1-1〜T1-9、T2-1〜T2-4、D-1〜D-4）が PASS。Critical / High バグの発見なし。Low の軽微な問題1件（モバイル表示の detail-row スタイル）。
