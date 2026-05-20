@@ -7,7 +7,7 @@
 
 ## 1. 概要
 
-本アプリケーションは Vercel を使ってホスティングする。静的ファイルは Vercel CDN から配信し、Claude API との通信は Vercel Serverless Function（`api/check.js`）が担う。
+本アプリケーションは Vercel を使ってホスティングする。静的ファイルは Vercel CDN から配信し、Claude API  との通信は Vercel Serverless Function（`api/check.js`）が担う。
 
 ### 構成図
 

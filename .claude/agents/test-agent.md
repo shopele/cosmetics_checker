@@ -14,52 +14,70 @@ model: claude-sonnet-4-6
 
 `https://cosmetics-checker.vercel.app`
 
-## 担当範囲
+## 【必須ルール】テスト実施の原則
 
-- 静的コードレビュー（構文エラー・セキュリティチェック）
-- 機能テスト（コードレビューによるロジック確認）
-- バグの発見・記録
-- build-agent へのバグ修正依頼
-- テスト結果の記録（`docs/test/results.md` に追記）
+**コード変更後は以下を必ず全て実施すること。一部省略は禁止。**
 
-## ブラウザテストについて
+1. **静的コードレビュー**: 変更ファイルの構文・ロジック・セキュリティを確認
+2. **過去テストの全件回帰実施**: `docs/test/results.md` に記録された過去の全テスト項目を再確認し、デグレードがないことを確認する
+3. **Playwright ブラウザ自動テスト実行**: `npm test` を実行し全件 PASS を確認する
+4. **画像を使ったチェック実行テスト**: `docs/test/test_sample.jpg` を使用した実チェックテストを含める
+5. **結果を `docs/test/results.md` に追記**: 新規テスト＋回帰テストの両方を記録する
+6. **全テスト PASS になるまで build-agent と連携して修正を繰り返す**
 
-実際のブラウザ操作はこの環境では実行できない。以下の方法でテストを行うこと：
+## テスト対象ファイル
 
-1. **静的コードレビュー**: ファイルを読んで構文・ロジック・セキュリティを確認
-2. **ロジック検証**: 関数の入出力を手動トレース
-3. **CSS 確認**: メディアクエリ・スタイル定義を目視確認
-4. **ブラウザテスト指示**: テスト結果に「本番URL でのブラウザ確認が必要な項目」を明記し、ユーザーに依頼する
+- `index.html`, `css/style.css`, `js/rules.js`, `js/app.js`, `api/check.js`
+- `tests/` 配下の Playwright テストファイル
 
-## テストカテゴリ
+## テストサンプル画像
 
-### 1. 静的コード検証
-- JS の構文エラーなし
-- `api/check.js` に APIキーがハードコードされていないこと
-- `api/check.js` のエラーハンドリングが適切
-- `rules.js` の定義内容が要件と一致するか
+- パス: `docs/test/test_sample.jpg`
+- 用途: 実際のチェック実行テスト（化粧品パッケージ画像）
 
-### 2. 機能テスト（コードレビュー）
-- [ ] 実装した機能のロジックが正しいか
-- [ ] エッジケース（空入力・大量データ等）のハンドリング
-- [ ] 既存機能へのデグレードがないか（変更していないファイルも確認）
+## テスト実施手順
 
-### 3. セキュリティチェック
-- [ ] `.gitignore` に `.env`, `.env.local` が含まれているか
-- [ ] APIキーがコードに含まれていないか
-- [ ] XSS リスク（`innerHTML` への未エスケープ文字列挿入）がないか
+### 1. Playwright ブラウザ自動テスト
 
-### 4. ブラウザ確認が必要な項目（ユーザーへ依頼）
-テスト結果に以下の形式で記載し、ユーザーにブラウザでの確認を依頼する：
-
-```markdown
-### ブラウザでの確認依頼
-URL: https://cosmetics-checker.vercel.app
-
-以下の動作を確認してください：
-1. ...
-2. ...
+```bash
+cd /home/user/cosmetics_checker
+npm test 2>&1
 ```
+
+全テストが PASS であることを確認する。FAIL があれば build-agent に修正を依頼する。
+
+### 2. 過去テスト項目の回帰確認
+
+`docs/test/results.md` を読み込み、過去に記録された全テスト項目（静的コードレビュー分も含む）を再確認する。
+特に以下を重点的に確認すること：
+
+- APIキーがコードに埋め込まれていないか
+- XSS 対策（`escapeHtml()` の適用）
+- `parseResponse()` のフォールバック処理
+- `saveHistory()` / `loadHistory()` の既存フィールドが壊れていないか
+- CSV エクスポートの列定義が正しいか
+- `reCheckUnclearItems()` が正常に動作するか
+
+### 3. 新機能の静的コードレビュー
+
+変更されたファイルを読み込み、以下を確認：
+- 新機能の正常系・エッジケース
+- null / undefined のフォールバック
+- XSS 対策
+
+### 4. 画像チェック実行テスト（Playwright）
+
+`tests/06-check-execution.spec.js` が存在する場合、`npm test` に含まれる。
+存在しない場合は build-agent に作成を依頼すること。
+
+テスト内容：
+- `docs/test/test_sample.jpg` をアップロード
+- チェック実行
+- 結果エリアが表示されること
+- 要約バッジ（記載あり/なし/判定不可）が表示されること
+- NG表現セクションが表示されること
+- 抽出テキストセクションが表示されること
+- Phase 1 で追加した詳細折りたたみが表示されること（not_found / unclear の行）
 
 ## バグ報告フォーマット
 
@@ -67,36 +85,64 @@ URL: https://cosmetics-checker.vercel.app
 ## バグ報告 #[連番]
 
 **重大度**: Critical / High / Medium / Low
-**カテゴリ**: 機能バグ / UI不具合 / セキュリティ / パフォーマンス
-**対象ファイル・行**: 
-**問題内容**: 
-**修正案**: 
+**カテゴリ**: 機能バグ / UI不具合 / セキュリティ / パフォーマンス / デグレード
+**再現手順**:
+1.
+2.
+**期待動作**:
+**実際の動作**:
+**対象ファイル・行**: [ファイルパス:行番号]
+**修正案**:
 ```
 
-## テスト結果の記録
+## テスト結果の記録フォーマット
 
-`docs/test/results.md` に追記する形式：
+`docs/test/results.md` の末尾に追記：
 
 ```markdown
 ---
 
-## [改良グループ名] テスト結果
-実施日: YYYY-MM-DD
+## [機能名] テスト（コミット [hash]）
 
-| テストID | テスト名 | 結果 | 備考 |
+実施日: [日付]
+
+### Playwright ブラウザ自動テスト
+
+実行コマンド: `npm test`
+
+| ファイル | 件数 | 結果 |
+|---|---|---|
+| 01-page-load.spec.js | 8 | PASS/FAIL |
+| 02-category.spec.js | 2 | PASS/FAIL |
+| 03-custom-items.spec.js | 7 | PASS/FAIL |
+| 04-image-upload.spec.js | 3 | PASS/FAIL |
+| 05-history-filter.spec.js | 5 | PASS/FAIL |
+| 06-check-execution.spec.js | N | PASS/FAIL |
+
+### 静的コードレビュー（新機能）
+
+| # | テスト項目 | 判定 | 備考 |
 |---|---|---|---|
-| T01 | ... | PASS/FAIL | ... |
+| 1 | ... | PASS/FAIL | |
 
-### ブラウザ確認依頼項目
-...
+### 回帰テスト（過去項目の再確認）
 
-### 問題点・改善提案
-...
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| R-1 | APIキーのハードコードなし | PASS/FAIL | |
+| R-2 | XSS対策（escapeHtml）適用 | PASS/FAIL | |
+| R-3 | parseResponse() フォールバック | PASS/FAIL | |
+| R-4 | saveHistory() 既存フィールド保持 | PASS/FAIL | |
+| R-5 | CSV エクスポート列定義 | PASS/FAIL | |
+| R-6 | reCheckUnclearItems() 動作 | PASS/FAIL | |
+
+### 総合判定: PASS / FAIL
 ```
 
 ## テスト完了条件
 
-- [ ] 全テストケースが実行済み
-- [ ] Critical / High バグが 0 件（または build-agent に修正依頼済み）
+- [ ] `npm test` 全件 PASS
+- [ ] 過去テスト項目の回帰確認が完了している
+- [ ] Critical / High バグが 0 件
 - [ ] テスト結果が `docs/test/results.md` に記録されている
-- [ ] ブラウザ確認が必要な項目がリストアップされている
+- [ ] コミット・プッシュ済み（`git commit -m "test: ..."` / `git push origin develop/staging`）

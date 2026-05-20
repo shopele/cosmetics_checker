@@ -698,3 +698,189 @@ input[type="text"]:focus {
   .drop-zone:hover { background: transparent; color: var(--subtext); border-color: var(--border); }
   .drop-zone.touch-device { background: #F9FAFB; }
 }
+
+/* ── Phase 1.1: 判定詳細・改善案 ── */
+.detail-row td {
+  background: #F8FAFF;
+  padding: 0 12px 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.result-detail {
+  border-left: 3px solid var(--primary);
+  padding: 8px 12px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+  background: #EFF6FF;
+}
+
+.result-detail summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--primary);
+  font-weight: 600;
+  user-select: none;
+}
+
+.result-detail summary:hover {
+  text-decoration: underline;
+}
+
+.detail-content {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-reason {
+  font-size: 13px;
+  color: var(--subtext);
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--warning);
+}
+
+.detail-suggestion {
+  font-size: 13px;
+  color: var(--text);
+  padding: 6px 10px;
+  background: #fff;
+  border-radius: var(--radius);
+  border-left: 3px solid var(--success);
+}
+
+/* ── Phase 3: 入力モードタブ ── */
+.input-mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--border);
+}
+
+.tab-btn {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--subtext);
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.tab-btn:hover {
+  color: var(--primary);
+}
+
+.tab-active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.input-panel {
+  padding-top: 4px;
+}
+
+/* ── Phase 4: 成分照合セクション ── */
+.ingredients-section {
+  margin-top: 16px;
+}
+
+.ingredients-banner {
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 12px;
+  margin-top: 16px;
+}
+
+.banner-ingredients-ok {
+  background: #DCFCE7;
+  color: #15803D;
+  border: 1px solid #BBF7D0;
+}
+
+.banner-ingredients-warn {
+  background: #FEF3C7;
+  color: #92400E;
+  border: 1px solid #FDE68A;
+}
+
+.ingredients-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.ingredients-table th {
+  background: #FFFBEB;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 700;
+  border-bottom: 2px solid #FDE68A;
+  white-space: nowrap;
+}
+
+.ingredients-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.ingredients-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.ingredient-badge {
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid;
+}
+
+.ing-badge-match { background: #DCFCE7; color: #15803D; border-color: #BBF7D0; }
+.ing-badge-unmatch { background: #FEF3C7; color: #92400E; border-color: #FDE68A; }
+.ing-badge-variant { background: #E0E7FF; color: #3730A3; border-color: #C7D2FE; }
+
+/* ── Phase 4 スマホ対応 ── */
+@media (max-width: 640px) {
+  .ingredients-table thead { display: none; }
+  .ingredients-table, .ingredients-table tbody, .ingredients-table tr, .ingredients-table td {
+    display: block;
+    width: 100%;
+  }
+  .ingredients-table tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 10px;
+    padding: 8px 10px;
+  }
+  .ingredients-table td {
+    border: none;
+    padding: 4px 0;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .ingredients-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--subtext);
+    font-size: 11px;
+    min-width: 70px;
+  }
+}
+
+/* ── Phase 2: モバイル表示での detail-row スタイル修正 ── */
+@media (max-width: 640px) {
+  .detail-row { border: none !important; margin-bottom: 0 !important; padding: 0 !important; }
+}
