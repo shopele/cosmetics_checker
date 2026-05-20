@@ -11,7 +11,7 @@ export default defineConfig({
     video: 'off',
   },
   webServer: {
-    command: 'node server.js',
+    command: 'ANTHROPIC_API_KEY=test-key node server.js',
     url: 'http://localhost:3000',
     reuseExistingServer: true,
     timeout: 10000,
