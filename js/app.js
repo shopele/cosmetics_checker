@@ -2,6 +2,7 @@ const DEFAULT_API_MODEL = 'claude-sonnet-4-6';
 const STORAGE_KEY_HISTORY = 'yakki_checker_history';
 const STORAGE_KEY_MODEL = 'yakki_checker_model';
 const STORAGE_KEY_CUSTOM_ITEMS = 'yakki_checker_custom_items';
+const STORAGE_KEY_CHECKER_NAME = 'yakki_checker_name';
 const SESSION_KEY_RUNNING = 'yakki_checker_running';
 const MAX_HISTORY = 50;
 const MAX_IMAGE_PX = 1600;
@@ -31,10 +32,16 @@ function jpegQualityForSize(byteSize) {
 }
 
 let selectedImages = [];
+// Phase 3.2: PDF から画像化した事前エンコード済み画像
+let selectedEncodedImages = [];
+// Phase 3.1: 入力モード ('image' | 'text')
+let inputMode = 'image';
 // 直近のチェック結果（unclear 再チェック用に保持）
 let lastResults = null;
 let lastCategory = null;
 let lastHistoryId = null;
+// 直近のチェック opts（HTML レポート用に保持）
+let lastCheckOpts = null;
 
 // ── 初期化 ──────────────────────────────────────────────────
 
@@ -51,6 +58,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupExportButton();
   setupClearImagesButton();
   setupCustomItemsUI();
+  setupCheckerName();
+  setupInputModeTabs();
   registerServiceWorker();
 });
 
@@ -79,7 +88,55 @@ function setupModelSelector() {
   sel.addEventListener('change', () => setSelectedModel(sel.value));
 }
 
-// Service Worker（オフライン対応）
+// ── Phase 2.2: 担当者名 ─────────────────────────────────────
+
+function setupCheckerName() {
+  const input = document.getElementById('checkerNameInput');
+  if (!input) return;
+  input.value = localStorage.getItem(STORAGE_KEY_CHECKER_NAME) || '';
+  input.addEventListener('input', () => {
+    localStorage.setItem(STORAGE_KEY_CHECKER_NAME, input.value);
+  });
+}
+
+function getCheckerName() {
+  return localStorage.getItem(STORAGE_KEY_CHECKER_NAME) || '';
+}
+
+// ── Phase 3.1: 入力モード切り替えタブ ────────────────────────
+
+function setupInputModeTabs() {
+  const tabs = document.querySelectorAll('.tab-btn');
+  const textarea = document.getElementById('textInputArea');
+  const charCount = document.getElementById('textCharCount');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const mode = tab.dataset.mode;
+      inputMode = mode;
+      // タブのスタイル切り替え
+      tabs.forEach(t => t.classList.remove('tab-active'));
+      tab.classList.add('tab-active');
+      // パネル表示切り替え
+      const panelImage = document.getElementById('panelImage');
+      const panelText = document.getElementById('panelText');
+      if (panelImage) panelImage.style.display = mode === 'image' ? 'block' : 'none';
+      if (panelText) panelText.style.display = mode === 'text' ? 'block' : 'none';
+      updateCheckButton();
+    });
+  });
+
+  // テキストエリアの文字数カウント
+  if (textarea && charCount) {
+    textarea.addEventListener('input', () => {
+      const len = textarea.value.length;
+      charCount.textContent = len > 0 ? `${len.toLocaleString()}文字` : '';
+      updateCheckButton();
+    });
+  }
+}
+
+// ── Service Worker（オフライン対応）
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
@@ -123,8 +180,91 @@ function addImages(files) {
       selectedImages.push(file);
     }
   });
+
+  // Phase 3.2: PDF ファイル処理
+  const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+  pdfFiles.forEach(file => processPdfFile(file));
+
   renderPreviews();
   updateCheckButton();
+}
+
+// ── Phase 3.2: PDF 処理 ─────────────────────────────────────
+
+function loadPdfjsScript() {
+  return new Promise((resolve, reject) => {
+    if (window.pdfjsLib) { resolve(window.pdfjsLib); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    script.onload = () => {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      resolve(window.pdfjsLib);
+    };
+    script.onerror = () => reject(new Error('pdf.js の読み込みに失敗しました'));
+    document.head.appendChild(script);
+  });
+}
+
+async function processPdfFile(file) {
+  const spinner = document.getElementById('spinner');
+  if (spinner) { spinner.style.display = 'block'; spinner.textContent = `PDF を読み込み中: ${escapeHtml(file.name)}`; }
+
+  try {
+    const pdfjsLib = await loadPdfjsScript();
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    // テキストレイヤー確認
+    let allText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      allText += textContent.items.map(item => item.str).join(' ');
+    }
+
+    if (allText.trim().length > 0) {
+      // テキストレイヤーあり → テキストモードに自動切り替え
+      const textarea = document.getElementById('textInputArea');
+      if (textarea) textarea.value = allText.trim();
+      const charCount = document.getElementById('textCharCount');
+      if (charCount) charCount.textContent = `${allText.trim().length.toLocaleString()}文字`;
+      // タブ切り替え
+      inputMode = 'text';
+      const tabText = document.getElementById('tabText');
+      const tabImage = document.getElementById('tabImage');
+      const panelText = document.getElementById('panelText');
+      const panelImage = document.getElementById('panelImage');
+      if (tabText) { tabText.classList.add('tab-active'); }
+      if (tabImage) { tabImage.classList.remove('tab-active'); }
+      if (panelText) panelText.style.display = 'block';
+      if (panelImage) panelImage.style.display = 'none';
+    } else {
+      // テキストレイヤーなし → ページ単位で画像化
+      for (let i = 1; i <= pdf.numPages; i++) {
+        if (spinner) spinner.textContent = `PDF を画像化中: ${i}/${pdf.numPages} ページ`;
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        selectedEncodedImages.push({
+          data: dataUrl.split(',')[1],
+          media_type: 'image/jpeg',
+          name: `${file.name}_page${i}`
+        });
+      }
+    }
+
+    updateCheckButton();
+  } catch (err) {
+    showError(`PDF 処理エラー: ${err.message}`);
+  } finally {
+    if (spinner) { spinner.style.display = 'none'; spinner.textContent = 'AIが確認中です... しばらくお待ちください'; }
+  }
 }
 
 function removeImage(index) {
@@ -135,6 +275,7 @@ function removeImage(index) {
 
 function clearImages() {
   selectedImages = [];
+  selectedEncodedImages = [];
   renderPreviews();
   updateCheckButton();
 }
@@ -272,11 +413,22 @@ function setupCheckButton() {
 }
 
 function updateCheckButton() {
-  document.getElementById('checkBtn').disabled = selectedImages.length === 0;
+  const btn = document.getElementById('checkBtn');
+  if (!btn) return;
+  if (inputMode === 'text') {
+    const textarea = document.getElementById('textInputArea');
+    btn.disabled = !textarea || textarea.value.trim() === '';
+  } else {
+    btn.disabled = selectedImages.length === 0 && selectedEncodedImages.length === 0;
+  }
 }
 
 async function runCheck() {
-  if (selectedImages.length === 0) return showError('画像をアップロードしてください。');
+  // Phase 3.1: テキストモードは別フローへ
+  if (inputMode === 'text') { runTextCheck(); return; }
+
+  const hasImages = selectedImages.length > 0 || selectedEncodedImages.length > 0;
+  if (!hasImages) return showError('画像をアップロードしてください。');
 
   const category = document.querySelector('input[name="category"]:checked').value;
 
@@ -286,7 +438,11 @@ async function runCheck() {
   clearResultArea();
 
   try {
-    const encodedImages = await Promise.all(selectedImages.map(resizeAndEncode));
+    // 通常画像 + PDF 画像化済み両方をエンコード
+    const encodedImages = [
+      ...(await Promise.all(selectedImages.map(resizeAndEncode))),
+      ...selectedEncodedImages
+    ];
     const prompt = buildPrompt(category);
     const response = await callAPI(encodedImages, prompt);
     const { results, ng_expressions, extracted_text } = parseResponse(response, category);
@@ -296,9 +452,11 @@ async function runCheck() {
 
     lastResults = results;
     lastCategory = category;
-    lastHistoryId = saveHistory({ category, results, ng_expressions, extracted_text, overallStatus, imageCount: selectedImages.length, usage, model });
+    const opts = { usage, model, ng_expressions, extracted_text };
+    lastCheckOpts = opts;
+    lastHistoryId = saveHistory({ category, results, ng_expressions, extracted_text, overallStatus, imageCount: encodedImages.length, usage, model });
 
-    displayResults(results, overallStatus, category, { usage, model, historyId: lastHistoryId, ng_expressions, extracted_text });
+    displayResults(results, overallStatus, category, { ...opts, historyId: lastHistoryId });
     loadHistory();
   } catch (err) {
     showError(errorMessage(err));
@@ -306,6 +464,133 @@ async function runCheck() {
     sessionStorage.removeItem(SESSION_KEY_RUNNING);
     setLoading(false);
   }
+}
+
+// ── Phase 3.1: テキストモードのチェック実行 ─────────────────
+
+async function runTextCheck() {
+  const textarea = document.getElementById('textInputArea');
+  const text = textarea ? textarea.value.trim() : '';
+  if (!text) return showError('テキストを入力してください。');
+
+  const category = document.querySelector('input[name="category"]:checked').value;
+
+  sessionStorage.setItem(SESSION_KEY_RUNNING, '1');
+  setLoading(true);
+  hideError();
+  clearResultArea();
+
+  try {
+    const prompt = buildPromptForText(category, text);
+    const response = await callAPIText(prompt);
+    const { results, ng_expressions, extracted_text } = parseResponse(response, category);
+    const overallStatus = calcOverallStatus(results);
+    const usage = response.usage || null;
+    const model = response.model || getSelectedModel();
+
+    lastResults = results;
+    lastCategory = category;
+    const opts = { usage, model, ng_expressions, extracted_text };
+    lastCheckOpts = opts;
+    lastHistoryId = saveHistory({ category, results, ng_expressions, extracted_text, overallStatus, imageCount: 0, usage, model });
+
+    displayResults(results, overallStatus, category, { ...opts, historyId: lastHistoryId });
+    loadHistory();
+  } catch (err) {
+    showError(errorMessage(err));
+  } finally {
+    sessionStorage.removeItem(SESSION_KEY_RUNNING);
+    setLoading(false);
+  }
+}
+
+function buildPromptForText(category, text) {
+  const rule = RULES[category];
+  const allItems = getAllItems(category);
+  const itemsJson = JSON.stringify(
+    allItems.map(item => ({ id: item.id, name: item.name })),
+    null, 2
+  );
+
+  return `あなたは薬機法の表記チェックを行うアシスタントです。
+以下のテキスト（製品パッケージの記載内容）を見て、各項目が含まれているかどうかのみを判定してください。
+
+【重要な注意事項】
+- 法的な適否判断や解釈は行わないでください
+- 「テキスト内に記載が見えるか否か」のみを判定してください
+
+チェックカテゴリ: ${rule.label}（${rule.law}）
+
+以下のJSON形式のみで回答してください（説明文は不要）：
+{
+  "results": [
+    {
+      "id": "項目ID",
+      "name": "項目名",
+      "status": "found|not_found|unclear",
+      "note": "補足（任意、簡潔に）",
+      "reason": "not_found または unclear の場合: なぜこの項目が確認できないかの説明",
+      "suggestion": "not_found または unclear の場合: どのように改善すればよいかの具体的な提案"
+    }
+  ],
+  "ng_expressions": [
+    {
+      "expression": "発見した表現",
+      "category_id": "ng_01",
+      "category_name": "効能効果の標榜",
+      "location": "表現が見つかった場所の説明"
+    }
+  ],
+  "extracted_text": "入力テキストをそのまま返してください"
+}
+
+statusの値の意味：
+- found: テキスト内に記載が確認できる
+- not_found: テキスト内に記載が確認できない
+- unclear: 判定するための情報が不足している
+
+## タスク1: 記載有無チェック
+チェック項目：
+${itemsJson}
+
+## タスク2: NG表現チェック
+以下のカテゴリに該当する表現がテキストに含まれていないか確認してください。
+該当する表現が見つかった場合は、ng_expressions 配列に追加してください。見つからない場合は空配列 [] にしてください。
+
+NG表現カテゴリ:
+- ng_01: 効能効果の標榜（医薬品的な効能効果を暗示・標榜する表現。例: シミが消える、育毛、育毛促進、アトピー、湿疹に効く）
+- ng_02: 絶対的表現（最大級・絶対的な効果を主張する表現。例: 世界一、完全に、必ず、絶対）
+- ng_03: 医療機関・専門家による推薦の偽装（医師・専門家が推薦するかのような誇大表現。例: 皮膚科医推薦、医師が認めた）
+- ng_04: 未承認の効能効果（医薬部外品のみ。承認を受けていない効能効果の表示）
+
+## 入力テキスト
+${text}`;
+}
+
+async function callAPIText(promptText) {
+  const body = {
+    model: getSelectedModel(),
+    max_tokens: 2048,
+    messages: [{
+      role: 'user',
+      content: promptText
+    }]
+  };
+
+  const res = await fetch('/api/check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const apiErr = new Error(err.error?.message || `HTTP ${res.status}`);
+    apiErr.status = res.status;
+    throw apiErr;
+  }
+
+  return res.json();
 }
 
 // ── unclear 項目の個別再チェック ─────────────────────────────
@@ -735,6 +1020,8 @@ function displayResults(results, overallStatus, category, opts = {}) {
   const reCheckBtn = counts.unclear > 0
     ? `<button class="btn btn-secondary" id="reCheckBtn">? 判定不可項目を再チェック（${counts.unclear}件）</button>`
     : '';
+  // Phase 2.1: HTML レポートボタン
+  const reportBtn = `<button class="btn btn-secondary" id="reportBtn">HTMLレポート出力</button>`;
 
   // メモエリア
   const historyId = opts.historyId || lastHistoryId;
@@ -750,9 +1037,10 @@ function displayResults(results, overallStatus, category, opts = {}) {
   const model = opts.model || getSelectedModel();
   const costInfo = usage ? renderCostInfo(usage, model) : '';
 
-  // NG表現・抽出テキストセクション
+  // NG表現・抽出テキスト・成分照合セクション
   const ngExpressionsSection = renderNgExpressionsSection(opts.ng_expressions);
   const extractedTextSection = renderExtractedTextSection(opts.extracted_text);
+  const ingredientsSection = renderIngredientsSection(opts.extracted_text || '');
 
   area.style.display = 'block';
   area.innerHTML = `
@@ -766,6 +1054,7 @@ function displayResults(results, overallStatus, category, opts = {}) {
     <div class="result-actions no-print">
       ${reCheckBtn}
       <button class="btn btn-secondary" id="printBtn">🖨 印刷 / PDF保存</button>
+      ${reportBtn}
     </div>
     ${memoArea}
     <div class="table-wrapper">
@@ -784,7 +1073,8 @@ function displayResults(results, overallStatus, category, opts = {}) {
       </table>
     </div>
     ${ngExpressionsSection}
-    ${extractedTextSection}`;
+    ${extractedTextSection}
+    ${ingredientsSection}`;
 
   // 後付けイベント
   const reBtn = document.getElementById('reCheckBtn');
@@ -795,6 +1085,28 @@ function displayResults(results, overallStatus, category, opts = {}) {
   if (memoInput && historyId) {
     memoInput.addEventListener('input', () => {
       updateHistory(historyId, { memo: memoInput.value });
+    });
+  }
+  // Phase 2.1: HTML レポートボタン
+  const rpBtn = document.getElementById('reportBtn');
+  if (rpBtn) {
+    rpBtn.addEventListener('click', () => {
+      // 画像の最初の DataURL をプレビューから取得
+      const previewImg = document.querySelector('#previewList .preview-item img');
+      const imageDataUrl = previewImg ? previewImg.src : null;
+      const hist = historyId ? getHistories().find(h => h.id === historyId) : null;
+      downloadHtmlReport({
+        results,
+        ng_expressions: opts.ng_expressions || [],
+        extracted_text: opts.extracted_text || '',
+        overallStatus,
+        category,
+        categoryLabel: rule.label,
+        timestamp: hist ? hist.timestamp : new Date().toISOString(),
+        model: opts.model || getSelectedModel(),
+        checkerName: getCheckerName(),
+        imageDataUrl
+      });
     });
   }
 }
@@ -860,6 +1172,135 @@ function renderExtractedTextSection(extractedText) {
   `;
 }
 
+// ── Phase 4.2: 成分照合 ───────────────────────────────────────
+
+function normalizeIngredientName(str) {
+  return str.trim().toLowerCase().replace(/\s+/g, '').replace(/　/g, '');
+}
+
+function matchIngredients(extractedText) {
+  if (typeof INGREDIENTS_DB === 'undefined' || INGREDIENTS_DB.length === 0) {
+    return { matched: [], unmatched: [], variants_found: [] };
+  }
+  if (!extractedText || extractedText.trim() === '') {
+    return { matched: [], unmatched: [], variants_found: [] };
+  }
+
+  // 成分表部分の切り出し（「成分」「全成分」「配合成分」等のキーワード以降）
+  const lines = extractedText.split(/[\n\r]/);
+  let ingredientStartIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/全成分|配合成分|成分[:：]|成分$/.test(lines[i])) {
+      ingredientStartIdx = i;
+      break;
+    }
+  }
+  const ingredientText = ingredientStartIdx >= 0
+    ? lines.slice(ingredientStartIdx).join('\n')
+    : extractedText;
+
+  // カンマ・読点・改行・スラッシュで分割
+  const candidates = ingredientText
+    .split(/[、,，\n\r\/・]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0 && !/^[0-9\s\.\-\(\)（）%％]+$/.test(s));
+
+  const matched = [];
+  const unmatched = [];
+  const variants_found = [];
+  const seenNames = new Set();
+
+  candidates.forEach(candidate => {
+    const norm = normalizeIngredientName(candidate);
+    if (norm === '' || norm.length < 2) return;
+    if (seenNames.has(norm)) return;
+    seenNames.add(norm);
+
+    let found = false;
+    for (const entry of INGREDIENTS_DB) {
+      const jaMatch = normalizeIngredientName(entry.ja) === norm;
+      const inciMatch = normalizeIngredientName(entry.inci) === norm;
+      const variantMatch = entry.variants.some(v => normalizeIngredientName(v) === norm);
+
+      if (jaMatch || inciMatch) {
+        matched.push({ candidate, canonical: entry.ja });
+        found = true;
+        break;
+      }
+      if (variantMatch) {
+        matched.push({ candidate, canonical: entry.ja });
+        variants_found.push({ candidate, canonical: entry.ja });
+        found = true;
+        break;
+      }
+    }
+
+    if (!found) {
+      unmatched.push(candidate);
+    }
+  });
+
+  return { matched, unmatched, variants_found };
+}
+
+function renderIngredientsSection(extractedText) {
+  if (typeof INGREDIENTS_DB === 'undefined' || INGREDIENTS_DB.length === 0) return '';
+
+  const { matched, unmatched, variants_found } = matchIngredients(extractedText);
+  const total = matched.length + unmatched.length;
+  if (total === 0) return '';
+
+  const bannerClass = unmatched.length === 0 ? 'banner-ingredients-ok' : 'banner-ingredients-warn';
+  const bannerText = unmatched.length === 0
+    ? `成分照合: 全 ${total} 成分がDBに登録済みです`
+    : `成分照合: ${unmatched.length} 件の未登録成分が見つかりました`;
+
+  const statsHtml = `
+    <div class="ingredients-stats">
+      <span class="ingredient-badge ing-badge-match">登録済み ${matched.length}</span>
+      <span class="ingredient-badge ing-badge-unmatch">未登録 ${unmatched.length}</span>
+      <span class="ingredient-badge ing-badge-variant">表記ゆれ ${variants_found.length}</span>
+    </div>`;
+
+  let unmatchTable = '';
+  if (unmatched.length > 0) {
+    const rows = unmatched.map(name => `
+      <tr>
+        <td data-label="成分名">${escapeHtml(name)}</td>
+        <td data-label="備考" style="color:var(--warning)">DBに未登録</td>
+      </tr>`).join('');
+    unmatchTable = `
+      <div class="table-wrapper">
+        <table class="ingredients-table">
+          <thead>
+            <tr><th>未登録成分名</th><th>備考</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  let variantList = '';
+  if (variants_found.length > 0) {
+    const items = variants_found.map(v =>
+      `<li><strong>${escapeHtml(v.candidate)}</strong> → 正式名称: ${escapeHtml(v.canonical)}</li>`
+    ).join('');
+    variantList = `
+      <div style="margin-top:8px;">
+        <p style="font-size:13px;font-weight:700;color:var(--primary);margin-bottom:4px;">表記ゆれ（別名・略称が使用されている成分）</p>
+        <ul style="font-size:12px;padding-left:18px;color:var(--text);">${items}</ul>
+      </div>`;
+  }
+
+  return `
+    <div class="ingredients-section">
+      <div class="ingredients-banner ${bannerClass}">${bannerText}</div>
+      ${statsHtml}
+      ${unmatchTable}
+      ${variantList}
+    </div>`;
+}
+
 function clearResultArea() {
   const area = document.getElementById('resultArea');
   area.innerHTML = '';
@@ -883,7 +1324,8 @@ function saveHistory(entry) {
     extracted_text: entry.extracted_text || '',
     memo: '',
     usage: entry.usage || null,
-    model: entry.model || null
+    model: entry.model || null,
+    checker_name: getCheckerName()
   };
   histories.unshift(record);
   if (histories.length > MAX_HISTORY) histories.splice(MAX_HISTORY);
@@ -1016,7 +1458,7 @@ function exportCSV() {
   const statusLabel = s => s === 'found' ? '記載あり' : s === 'not_found' ? '記載なし' : '判定不可';
   const overallLabel = s => s === 'ok' ? '問題なし' : '要確認';
 
-  const headers = ['チェック日時', 'カテゴリ', '画像枚数', '全体判定', 'NG表現件数', 'メモ', ...allItemIds.map(id => itemNames[id])];
+  const headers = ['チェック日時', 'カテゴリ', '画像枚数', '全体判定', 'NG表現件数', '担当者名', 'メモ', ...allItemIds.map(id => itemNames[id])];
 
   const rows = histories.map(h => {
     const dt = new Date(h.timestamp);
@@ -1026,7 +1468,7 @@ function exportCSV() {
       const r = h.results.find(r => r.id === id);
       return r ? statusLabel(r.status) : '';
     });
-    return [dateStr, h.categoryLabel, `${h.imageCount}枚`, overallLabel(h.overallStatus), ngCount, h.memo || '', ...itemCols];
+    return [dateStr, h.categoryLabel, `${h.imageCount}枚`, overallLabel(h.overallStatus), ngCount, h.checker_name || '', h.memo || '', ...itemCols];
   });
 
   const csv = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\r\n');
@@ -1047,7 +1489,11 @@ function exportCSV() {
 function setLoading(active) {
   const btn = document.getElementById('checkBtn');
   const spinner = document.getElementById('spinner');
-  btn.disabled = active || selectedImages.length === 0;
+  if (!active) {
+    updateCheckButton();
+  } else {
+    btn.disabled = true;
+  }
   btn.textContent = active ? '確認中...' : 'チェック実行';
   spinner.style.display = active ? 'block' : 'none';
 }
