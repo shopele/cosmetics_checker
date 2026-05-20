@@ -471,3 +471,48 @@ Running 25 tests using 2 workers
 ### 総合判定: PASS
 
 全25テストが PASS。ブラウザ実動作（Chromium、headless）での UI 要素の存在・状態・操作が自動検証された。
+
+---
+
+## 回帰テスト・画像チェック実行テスト追加 テスト（コミット bcc9cc7）
+
+実施日: 2026-05-20
+
+### Playwright ブラウザ自動テスト
+
+実行コマンド: `npm test`
+
+| ファイル | 件数 | 結果 |
+|---|---|---|
+| 01-page-load.spec.js | 8 | PASS |
+| 02-category.spec.js | 2 | PASS |
+| 03-custom-items.spec.js | 7 | PASS |
+| 04-image-upload.spec.js | 3 | PASS |
+| 05-history-filter.spec.js | 5 | PASS |
+| 06-check-execution.spec.js | 12（4 PASS + 8 skip） | PASS |
+
+※ 06-check-execution.spec.js の 8 件は `ANTHROPIC_API_KEY` が実キーでない場合に自動スキップ（設計通り）。
+
+### 静的コードレビュー（新機能）
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| 1 | test_sample.jpg パスが正しく解決される | PASS | `path.join(__dirname, '..', 'docs', 'test', 'test_sample.jpg')` |
+| 2 | HAS_API_KEY フラグが test-key を除外している | PASS | `!== 'test-key'` チェック済み |
+| 3 | API不要テストが全4件 PASS | PASS | プレビュー・ボタン有効化・カテゴリ切替 |
+| 4 | API必要テストが適切にスキップされる | PASS | `test.skip(!HAS_API_KEY, ...)` |
+
+### 回帰テスト（過去項目の再確認）
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| R-1 | APIキーのハードコードなし | PASS | `process.env.ANTHROPIC_API_KEY` のみ使用 |
+| R-2 | XSS対策（escapeHtml）適用 | PASS | results/ng表示・textarea に適用済み |
+| R-3 | parseResponse() フォールバック | PASS | reason/suggestion が空文字列フォールバック |
+| R-4 | saveHistory() 既存フィールド保持 | PASS | category/results/ng/text/status/imageCount/usage/model |
+| R-5 | CSV エクスポート列定義 | PASS | app.js 内 exportCSV 実装確認済み |
+| R-6 | reCheckUnclearItems() 動作 | PASS | reason/suggestion を再実行後も保持 |
+
+### 総合判定: PASS
+
+全37テスト（29 PASS + 8 skip）。デグレードなし。
