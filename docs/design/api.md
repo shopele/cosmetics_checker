@@ -1,7 +1,8 @@
 # API連携仕様書
 
 作成日: 2026-05-19  
-バージョン: 1.1（2026-05-19 Vercel Serverless Function 仕様追記）
+最終更新: 2026-05-20  
+バージョン: 1.2
 
 ---
 
@@ -11,7 +12,7 @@
 |---|---|
 | エンドポイント | `https://api.anthropic.com/v1/messages` |
 | メソッド | POST |
-| モデル | `claude-opus-4-7` |
+| モデル | クライアント選択モデル（サーバーで `ANTHROPIC_MODEL` により上書き可） |
 | max_tokens | 2048 |
 
 ---
@@ -36,7 +37,7 @@
 
 ```json
 {
-  "model": "claude-opus-4-7",
+  "model": "claude-sonnet-4-6",
   "max_tokens": 2048,
   "messages": [
     {
@@ -96,7 +97,16 @@
       "status": "found|not_found|unclear",
       "note": "補足（任意、簡潔に）"
     }
-  ]
+  ],
+  "ng_expressions": [
+    {
+      "expression": "発見した表現",
+      "category_id": "ng_01",
+      "category_name": "効能効果の標榜",
+      "location": "表現が見つかった場所の説明"
+    }
+  ],
+  "extracted_text": "画像から読み取ったテキスト全文"
 }
 
 statusの値の意味：
@@ -167,7 +177,7 @@ ${itemsJson}`;
       "text": "{\n  \"results\": [\n    {\"id\": \"cs_01\", \"name\": \"製品名（名称）\", \"status\": \"found\", \"note\": \"\"}\n  ]\n}"
     }
   ],
-  "model": "claude-opus-4-7-...",
+  "model": "claude-...",
   "stop_reason": "end_turn"
 }
 ```
@@ -175,7 +185,7 @@ ${itemsJson}`;
 ### レスポンスパース処理
 
 ```javascript
-async function parseResponse(responseJson, category) {
+function parseResponse(responseJson, category) {
   const text = responseJson.content[0].text;
   
   // JSONブロックを抽出（```json ... ``` で囲まれている場合も対応）
@@ -183,10 +193,10 @@ async function parseResponse(responseJson, category) {
   if (!jsonMatch) throw new Error('JSONが見つかりません');
   
   const parsed = JSON.parse(jsonMatch[0]);
-  const aiResults = parsed.results;
+  const aiResults = parsed.results || [];
   
   // rules.js の項目と突合して完全な結果を生成
-  return RULES[category].items.map(item => {
+  const results = RULES[category].items.map(item => {
     const aiResult = aiResults.find(r => r.id === item.id) || {};
     return {
       id: item.id,
@@ -198,6 +208,12 @@ async function parseResponse(responseJson, category) {
       note: aiResult.note || ''
     };
   });
+
+  return {
+    results,
+    ng_expressions: Array.isArray(parsed.ng_expressions) ? parsed.ng_expressions : [],
+    extracted_text: typeof parsed.extracted_text === 'string' ? parsed.extracted_text : ''
+  };
 }
 ```
 
@@ -217,7 +233,7 @@ async function parseResponse(responseJson, category) {
 ## 6. 画像サイズ考慮事項
 
 - Claude API は1画像あたり最大5MB
-- 大きな画像は Canvas を使って事前にリサイズ（最大1920px）することを推奨
+- 大きな画像は Canvas を使って事前にリサイズ（最大1600px）する
 - media_type は `image/jpeg`, `image/png`, `image/webp`, `image/gif` に対応
 
 ---
@@ -242,6 +258,7 @@ async function parseResponse(responseJson, category) {
 | リクエスト Content-Type | `application/json` |
 | レスポンス Content-Type | `application/json` |
 | タイムアウト | 30 秒（`vercel.json` の `maxDuration` で設定） |
+| レート制限 | IPあたり 10 リクエスト / 60秒（インメモリ） |
 
 ### 7.3 リクエスト仕様
 
@@ -250,7 +267,7 @@ async function parseResponse(responseJson, category) {
 **クライアントが送信するボディ（変更なし）**:
 ```json
 {
-  "model": "claude-opus-4-7",
+  "model": "claude-sonnet-4-6",
   "max_tokens": 2048,
   "messages": [
     {
@@ -273,6 +290,8 @@ async function parseResponse(responseJson, category) {
   ]
 }
 ```
+
+`api/check.js` では、`process.env.ANTHROPIC_MODEL` が設定されている場合に `body.model` を上書きする。
 
 **Serverless Function が Claude API に転送するヘッダー**:
 ```

@@ -102,13 +102,33 @@ vercel --prod
 | フィールド | 値 |
 |---|---|
 | Key | `ANTHROPIC_API_KEY` |
-| Value | `sk-ant-api03-...`（実際の API キー） |
+| Value | `[REDACTED]`（実際の API キー） |
 | Environment | `Production`、`Preview`、`Development` を選択 |
 
 補足:
 
 - `Sensitive` を有効化したままだと `Development` にチェックできない場合がある。
 - 今回は `Sensitive` を無効化して `Development` を含めて保存した。
+
+### 4.3 環境ごとのキー分離（推奨）
+
+セキュリティ事故時の影響を限定するため、環境ごとに別キーを設定する。
+
+| 環境 | 推奨キー |
+|---|---|
+| Production | `ANTHROPIC_API_KEY`（本番専用） |
+| Preview | `ANTHROPIC_API_KEY`（検証専用） |
+| Development | `ANTHROPIC_API_KEY`（開発専用） |
+
+モデル固定を行う場合は、同様に `ANTHROPIC_MODEL` も環境ごとに設定する。
+
+### 4.4 キー再発行と失効の手順（緊急時）
+
+1. Anthropic Console で現在のキーを失効する
+2. 新しいキーを発行する
+3. Vercel の Environment Variables を更新する（Production / Preview / Development）
+4. `Redeploy` して反映を確認する
+5. 旧キーの利用履歴を確認し、異常利用がないか監査する
 
 ### 4.2 設定後の再デプロイ
 
@@ -127,7 +147,8 @@ vercel --prod
 プロジェクトルートに `.env` ファイルを作成し、API キーを記載する。
 
 ```
-ANTHROPIC_API_KEY=sk-ant-api03-...
+ANTHROPIC_API_KEY=[REDACTED]
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ```
 
 `.env` ファイルは `.gitignore` に含まれており、リポジトリにはコミットされない。

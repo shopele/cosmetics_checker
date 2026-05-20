@@ -10,15 +10,19 @@
 ### アーキテクチャ
 
 ```
-ブラウザ（クライアントのみ）
-├── index.html        ← エントリーポイント・UI
-├── css/style.css     ← スタイル
+ブラウザ（フロントエンド）
+├── index.html
+├── css/style.css
 └── js/
-    ├── rules.js      ← チェックルール定義（薬機法根拠付き）
-    └── app.js        ← アプリケーションロジック全体
+  ├── rules.js
+  └── app.js
+
+サーバー（APIプロキシ）
+├── ローカル: server.js（Express）
+└── 本番: api/check.js（Vercel Serverless Function）
 ```
 
-バックエンドサーバーなし。全処理はブラウザ内で完結。
+ブラウザは `/api/check` のみを呼び出し、APIキーはサーバー側環境変数で保持する。
 
 ### 外部依存
 
@@ -54,31 +58,31 @@
 ### メイン処理（チェック実行）
 
 ```
-[1] APIキー確認
-    → 未入力の場合: エラーメッセージ表示・処理停止
-
-[2] 画像確認
+[1] 画像確認
     → 未選択の場合: エラーメッセージ表示・処理停止
 
-[3] カテゴリ取得
+[2] カテゴリ取得
     → rules.js から該当カテゴリのチェック項目リストを取得
 
-[4] 画像Base64変換
+[3] 画像Base64変換
     → FileReader API で各画像を Base64 エンコード
 
-[5] Claude API 呼び出し
-    → 全画像 + プロンプト（チェック項目一覧）を送信
+[4] /api/check 呼び出し
+  → 全画像 + プロンプト + 選択モデルを送信
     → ローディング表示
+  → サーバー側で `ANTHROPIC_API_KEY` を付与して Claude API へ転送
+  → `ANTHROPIC_MODEL` が設定されている場合はサーバー側モデルを優先
 
-[6] レスポンスパース
+[5] レスポンスパース
     → JSON形式のテキストを抽出・パース
     → パース失敗時: エラーメッセージ表示
 
-[7] 結果表示
+[6] 結果表示
     → 各項目の status（found / not_found / unclear）を表示
     → 全体判定（全項目 found → 問題なし / それ以外 → 要確認）
+  → NG表現・抽出テキスト・概算コストを表示
 
-[8] 履歴保存
+[7] 履歴保存
     → localStorageに結果を保存（最新50件）
 ```
 
@@ -88,10 +92,9 @@
 
 | エラー条件 | ユーザーへの表示 | 処理 |
 |---|---|---|
-| APIキー未入力 | 「APIキーを入力してください」 | 処理停止 |
 | 画像未選択 | 「画像をアップロードしてください」 | 処理停止 |
 | API通信エラー（ネットワーク） | 「通信エラーが発生しました。接続を確認してください」 | 処理停止 |
-| API認証エラー（401） | 「APIキーが無効です。確認してください」 | 処理停止 |
+| API認証エラー（401） | 「APIキーが無効です。サーバーの ANTHROPIC_API_KEY 設定を確認してください。」 | 処理停止 |
 | APIレスポンスパース失敗 | 「結果の解析に失敗しました。再試行してください」 | 処理停止 |
 | APIレート制限（429） | 「APIの利用制限に達しました。しばらくお待ちください」 | 処理停止 |
 
@@ -99,9 +102,10 @@
 
 ## 5. セキュリティ考慮事項
 
-- APIキーは `localStorage` に保存（平文）。パスワード入力欄（type=password）で表示はマスク
-- 画像データはブラウザ内でBase64変換後、Claude APIへ直接送信（中間サーバーなし）
-- 外部への画像送信は使用許可済み
+- APIキーはサーバー環境変数（`ANTHROPIC_API_KEY`）で管理し、フロントエンドに保持しない
+- モデル固定が必要な場合は `ANTHROPIC_MODEL` をサーバー環境変数で設定できる
+- 画像データはブラウザ内で Base64 変換後、`/api/check` 経由で Claude API へ送信
+- 秘密情報は `[REDACTED]` プレースホルダーで扱い、値そのものは出力しない
 
 ---
 
@@ -138,9 +142,9 @@ Vercel Serverless Function
 |---|---|---|
 | `api/check.js` | 新規作成 | Vercel Serverless Function（Claude API プロキシ） |
 | `vercel.json` | 新規作成 | ルーティング・ビルド設定 |
-| `package.json` | 更新 | `engines` フィールド追加、`express`/`dotenv` 削除 |
-| `server.js` | 削除対象 | Vercel 環境では不要（ローカル開発用として保持も可） |
-| `.gitignore` | 確認のみ | `.env` と `node_modules/` は既存で対応済み |
+| `package.json` | 更新 | `engines` 追加、`start` / `audit` スクリプト管理 |
+| `server.js` | 維持 | ローカル開発用 API プロキシ（`ANTHROPIC_MODEL` 上書き対応） |
+| `.gitignore` | 更新 | `.env.*` を除外し `.env.example` のみ追跡 |
 | 静的ファイル群 | 変更なし | 現在の配置（ルート直下）のままでよい |
 
 ### 7.3 静的ファイルの配置方針
@@ -193,26 +197,32 @@ export default async function handler(req, res) {
 ```
 
 **設計上の判断事項**:
-- `express` と `dotenv` は使用しない（Vercel ランタイムが不要）
 - `req.body` は Vercel が自動でパースする（`Content-Type: application/json` の場合）。ただし画像 Base64 を含むため最大ペイロードサイズに注意（後述）
-- Claude API のステータスコードはそのままクライアントに転送する（401・429 等をクライアント側の `errorMessage()` 関数で処理済み）
+- Claude API のステータスコードはそのままクライアントに転送する（401・429 等をクライアント側で処理）
+- レート制限（IPベース）を `api/check.js` に実装し、`X-RateLimit-*` ヘッダーを返す
+- サーバー側で `ANTHROPIC_MODEL` が設定されている場合、クライアント送信モデルを上書きする
 
 ### 7.5 `vercel.json` 設計
 
 ```json
 {
-  "functions": {
-    "api/check.js": {
-      "maxDuration": 30
-    }
-  }
+  "version": 2,
+  "builds": [
+    { "src": "api/check.js", "use": "@vercel/node", "config": { "maxDuration": 30 } },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "css/**", "use": "@vercel/static" },
+    { "src": "js/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/check", "dest": "/api/check.js" },
+    { "src": "/(.*)", "dest": "/$1" }
+  ]
 }
 ```
 
 **設計上の判断事項**:
-- `api/` ディレクトリ内のファイルは Vercel が自動でルーティングするため、`rewrites` セクションは不要。実際の `vercel.json` には記述していない
-- `maxDuration: 30` を指定する。Claude API（Vision）は画像サイズによっては応答に数十秒かかるため、デフォルトの 10 秒では不足するリスクがある（Vercel Hobby プランの上限は 60 秒）
-- `Content-Type: application/json` ヘッダーは Vercel が `res.json()` 呼び出し時に自動付与するため、`headers` セクションでの設定は不要
+- `maxDuration: 30` を指定する。Claude API（Vision）は画像サイズによっては応答に数十秒かかるため、デフォルト値では不足する可能性がある
+- 静的配信と API ルーティングを `builds` / `routes` で明示し、意図しないルーティング差異を防ぐ
 
 ### 7.6 `package.json` 更新方針
 
@@ -225,16 +235,17 @@ export default async function handler(req, res) {
     "node": ">=20.x"
   },
   "scripts": {
-    "dev": "node server.js"
+    "start": "node server.js",
+    "audit": "npm audit",
+    "audit:high": "npm audit --audit-level=high"
   }
 }
 ```
 
 **変更内容**:
-- `"type": "module"` に変更: `api/check.js` で `export default` 構文を使用するため CommonJS から ES Modules へ切り替える
-- `"engines": { "node": ">=20.x" }` を追加: Vercel の Node.js ランタイムバージョンを明示指定。Node.js 20 は Vercel の推奨 LTS バージョン
-- `express` と `dotenv` は現時点で `dependencies` に残存しているが、Serverless Function では不要。ローカル開発で `server.js` を使用する場合は `devDependencies` へ移動するか、`vercel dev` コマンドを代替手段として使うことを推奨する
-- `"main": "index.js"` は削除（エントリーポイントが不要なため）
+- `"type": "module"` を採用し、ES Modules で統一
+- `"engines": { "node": ">=20.x" }` を指定
+- ローカル起動 (`start`) と依存監査 (`audit`, `audit:high`) をスクリプト化
 
 **補足 - `server.js` の扱い**:
 - `server.js` は Vercel デプロイには不要だが、ローカル開発の参照用として削除せず保持を推奨
@@ -279,7 +290,8 @@ export const config = {
 
 | 変数名 | 設定箇所 | 値 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Vercel Dashboard > Settings > Environment Variables | 実際の API キー |
+| `ANTHROPIC_API_KEY` | Vercel Dashboard > Settings > Environment Variables | `[REDACTED]` |
+| `ANTHROPIC_MODEL` | Vercel Dashboard > Settings > Environment Variables | 例: `claude-opus-4-7` |
 
 Vercel Dashboard で設定した環境変数は、Serverless Function 内で `process.env.ANTHROPIC_API_KEY` として参照できる。`Production`・`Preview`・`Development` の各環境で個別に設定可能。
 

@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 const API_KEY = process.env.ANTHROPIC_API_KEY;
+const API_MODEL = process.env.ANTHROPIC_MODEL;
 
 if (!API_KEY) {
   console.error('エラー: .env ファイルに ANTHROPIC_API_KEY が設定されていません');
@@ -19,6 +20,11 @@ app.use(express.static(join(__dirname)));
 
 app.post('/api/check', async (req, res) => {
   try {
+    const body = { ...req.body };
+    if (API_MODEL) {
+      body.model = API_MODEL;
+    }
+
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -26,7 +32,7 @@ app.post('/api/check', async (req, res) => {
         'x-api-key': API_KEY,
         'anthropic-version': '2023-06-01'
       },
-      body: JSON.stringify(req.body)
+      body: JSON.stringify(body)
     });
 
     const data = await response.json();

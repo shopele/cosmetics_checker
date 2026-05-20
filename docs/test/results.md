@@ -6,6 +6,18 @@
 
 ---
 
+## 最新化メモ（2026-05-20）
+
+本書の本文は過去テスト記録として保持し、以下を現行仕様として優先する。
+
+- ローカル/APIともに `ANTHROPIC_MODEL` のサーバー側上書きに対応済み
+- `.gitignore` は `.env.*` を除外し、`.env.example` のみ追跡
+- CI に `security-checks`（gitleaks + npm audit）を追加済み
+- セキュリティ方針は `AGENTS.md` と `.github/copilot-instructions.md` を正とする
+- APIキー実値はドキュメント・ログへ記載しない（`[REDACTED]` で表記）
+
+---
+
 ## テスト結果サマリー
 
 | 区分 | 件数 |
