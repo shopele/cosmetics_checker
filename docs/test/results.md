@@ -637,3 +637,60 @@ const historyRow = page.locator('#historyBody tr').first();
 
 全12テストが PASS。  
 累計テスト実績: 49 tests（37 + 12）、全件 PASS。
+
+---
+
+## Phase 2〜4 新機能 Playwright テスト追加（コミット b3171ed）
+
+実施日: 2026-05-21
+
+### Playwright ブラウザ自動テスト
+
+実行コマンド: `npm test`（`--workers=1 --timeout=30000`）
+
+| ファイル | 件数 | 結果 |
+|---|---|---|
+| 01-page-load.spec.js | 8 | PASS |
+| 02-category.spec.js | 2 | PASS |
+| 03-custom-items.spec.js | 7 | PASS |
+| 04-image-upload.spec.js | 3 | PASS |
+| 05-history-filter.spec.js | 5 | PASS |
+| 06-check-execution.spec.js | 12（4 PASS + 8 skip） | PASS |
+| 07-phase2-report.spec.js | 5（3 PASS + 2 skip） | PASS |
+| 08-phase3-text-mode.spec.js | 5 | PASS |
+| 09-phase4-ingredients.spec.js | 2（0 PASS + 2 skip） | PASS |
+
+合計: 49件（37 PASS + 12 skip）。APIキー不要な全テストが PASS。
+
+※ skip テストは `ANTHROPIC_API_KEY` が未設定（または `test-key`）の場合に設計通り自動スキップ。
+
+### 静的コードレビュー（新機能テストファイル）
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| 1 | 07: `#checkerNameInput` セレクタが index.html の実 ID と一致 | PASS | `id="checkerNameInput"` を確認 |
+| 2 | 07: `localStorage.getItem('yakki_checker_name')` キーが app.js の `STORAGE_KEY_CHECKER_NAME` と一致 | PASS | `const STORAGE_KEY_CHECKER_NAME = 'yakki_checker_name'` を確認 |
+| 3 | 07: `#reportBtn` セレクタが `displayResults()` 内の HTML と一致 | PASS | `id="reportBtn"` のボタン生成を app.js L1024 で確認 |
+| 4 | 07: APIキー不要テスト（担当者名3件）が PASS | PASS | 実行結果で確認済み |
+| 5 | 07: APIキーありテスト（2件）が適切にスキップ | PASS | `test.skip(!HAS_API_KEY, ...)` で制御 |
+| 6 | 08: `#tabImage` / `#tabText` / `#panelImage` / `#panelText` が index.html と一致 | PASS | 全4セレクタを index.html で確認 |
+| 7 | 08: `#textInputArea` が index.html の `<textarea>` と一致 | PASS | `id="textInputArea"` を確認 |
+| 8 | 08: `input[type="file"]` の accept 属性に `.pdf` が含まれる | PASS | `accept="image/*,.pdf"` を index.html L73 で確認 |
+| 9 | 08: テキスト入力後にチェックボタンが有効になるロジックが app.js に存在する | PASS | `setupInputModeTabs()` + `updateCheckButton()` で `inputMode === 'text'` 時は `textInputArea` の文字数で制御 |
+| 10 | 09: `ANTHROPIC_API_KEY` がテストコードにハードコードされていない | PASS | `process.env.ANTHROPIC_API_KEY` のみ参照 |
+| 11 | 09: `.ingredients-section` セレクタが app.js の `renderIngredientsSection()` と一致する | PASS | app.js L1249 付近で確認 |
+
+### 回帰テスト（過去項目の再確認）
+
+| # | テスト項目 | 判定 | 備考 |
+|---|---|---|---|
+| R-1 | APIキーのハードコードなし | PASS | `api/check.js` は `process.env.ANTHROPIC_API_KEY` のみ。フロントエンドに API キーなし |
+| R-2 | XSS対策（escapeHtml）適用 | PASS | reason/suggestion/ng_expressions/note/name/article/extractedText に全て適用済み |
+| R-3 | parseResponse() フォールバック | PASS | `reason: ai.reason \|\| ''`、`suggestion: ai.suggestion \|\| ''`、`ng_expressions: Array.isArray(...) ? ... : []`、`extracted_text: typeof ... === 'string' ? ... : ''` |
+| R-4 | saveHistory() 既存フィールド保持 | PASS | id/timestamp/category/categoryLabel/imageCount/overallStatus/results/ng_expressions/extracted_text/memo/usage/model/checker_name が全て保持 |
+| R-5 | CSV エクスポート列定義 | PASS | `['チェック日時', 'カテゴリ', '画像枚数', '全体判定', 'NG表現件数', '担当者名', 'メモ', ...itemIds]` の列定義を確認 |
+| R-6 | reCheckUnclearItems() 動作 | PASS | unclear 項目の再チェックでマージ時に `reason/suggestion` も更新する実装を確認 |
+
+### 総合判定: PASS
+
+全49テスト（37 PASS + 12 skip）。デグレードなし。Critical / High バグなし。
