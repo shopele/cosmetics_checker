@@ -84,6 +84,11 @@ GitHub リポジトリ → Settings → Secrets and variables → Actions → Ne
 | `tests/04-image-upload.spec.js` | 画像アップロード | 3 | 不要 |
 | `tests/05-history-filter.spec.js` | 履歴フィルター | 5 | 不要 |
 | `tests/06-check-execution.spec.js` | チェック実行（実画像） | 12（4+8） | 8件のみ必要 |
+| `tests/07-phase2-report.spec.js` | Phase 2 担当者名・HTMLレポート | 5（3+2） | 2件のみ必要 |
+| `tests/08-phase3-text-mode.spec.js` | Phase 3 テキストモード・PDF | 5 | 不要 |
+| `tests/09-phase4-ingredients.spec.js` | Phase 4 成分照合 | 2 | 2件とも必要 |
+
+**合計: 49件（37 PASS + 12 skip）**
 
 ### `06-check-execution.spec.js` の内訳
 

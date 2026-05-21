@@ -694,3 +694,53 @@ const historyRow = page.locator('#historyBody tr').first();
 ### 総合判定: PASS
 
 全49テスト（37 PASS + 12 skip）。デグレードなし。Critical / High バグなし。
+
+---
+
+## Phase 2〜4 動作確認・成分DB拡充（コミット 342f08c）
+
+実施日: 2026-05-21
+
+### 動作確認（ブラウザ実動作）
+
+実行方法: Playwright + ローカルサーバー（`ANTHROPIC_API_KEY=test-key`）
+
+| # | 確認項目 | 結果 |
+|---|---|---|
+| 1 | 担当者名入力欄（`#checkerNameInput`）が表示される | PASS |
+| 2 | 画像タブ（`#tabImage`）が表示される | PASS |
+| 3 | テキストタブ（`#tabText`）が表示される | PASS |
+| 4 | テキストタブ切替後にテキスト入力エリア（`#textInputArea`）が表示される | PASS |
+| 5 | PDF accept属性（`image/*,.pdf`）が設定されている | PASS |
+| 6 | 画像タブに戻すと画像エリア（`#panelImage`）が表示される | PASS |
+| 7 | テキスト未入力時はチェックボタンが無効 | PASS |
+| 8 | テキスト入力後にチェックボタンが有効になる | PASS |
+| 9 | テキストクリア後はチェックボタンが無効に戻る | PASS |
+| 10 | 担当者名が localStorage（`yakki_checker_name`）に保存される | PASS |
+| 11 | リロード後も担当者名が保持される | PASS |
+
+### 成分DB拡充
+
+| 項目 | 内容 |
+|---|---|
+| 変更前 | 126件 |
+| 変更後 | 384件（+258件） |
+| 追加カテゴリ | 保湿成分・油性成分・界面活性剤・増粘剤・植物エキス・機能性美容成分・紫外線吸収剤・散乱剤・着色料・医薬部外品有効成分・pH調整剤・精油 |
+
+### Playwright テスト（成分DB拡充後）
+
+| ファイル | 件数 | 結果 |
+|---|---|---|
+| 01-page-load.spec.js | 8 | PASS |
+| 02-category.spec.js | 2 | PASS |
+| 03-custom-items.spec.js | 7 | PASS |
+| 04-image-upload.spec.js | 3 | PASS |
+| 05-history-filter.spec.js | 5 | PASS |
+| 06-check-execution.spec.js | 12（4 PASS + 8 skip） | PASS |
+| 07-phase2-report.spec.js | 5（3 PASS + 2 skip） | PASS |
+| 08-phase3-text-mode.spec.js | 5 | PASS |
+| 09-phase4-ingredients.spec.js | 2（0 PASS + 2 skip） | PASS |
+
+**合計: 49件（37 PASS + 12 skip）**
+
+### 総合判定: PASS
