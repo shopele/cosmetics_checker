@@ -1,0 +1,21 @@
+Copyright (c) 2026 shopele. All rights reserved.
+
+本リポジトリは、開発過程の公開・参照を目的として公開しています。
+
+- 閲覧・学習目的での参照は自由です。
+- 本リポジトリのコード・ドキュメント・データ（成分データベース、判定ルールを含む）の
+  複製、再配布、改変、商用利用は、著作権者の事前の書面による許諾がない限り禁止します。
+- 本ソフトウェアは現状有姿（AS IS）で提供され、動作・正確性についていかなる保証もしません。
+  本アプリの判定結果は参考情報であり、薬機法その他の法令適合性の最終判断は
+  利用者自身の責任で行ってください。
+
+---
+
+This repository is published for reference and educational viewing only.
+
+Copying, redistribution, modification, or commercial use of any code, documentation,
+or data in this repository (including the ingredients database and checking rules)
+is prohibited without prior written permission from the copyright holder.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND. The check results
+produced by this application are informational only and do not constitute legal advice.
